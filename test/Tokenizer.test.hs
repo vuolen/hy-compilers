@@ -35,7 +35,8 @@ propertyTests = testGroup "Property tests"
 
                 let (token, location) = head tokens
 
-                assert $ P.eq .$ ("token", token) .$ ("expected", IntegerLiteral n),
+                assert $ P.expect 1 .$ ("number of tokens", length tokens) 
+                assert $ P.expect (IntegerLiteral n) .$ ("token", fst $ head tokens),
 
         testProperty "Identifier string tokenized as identifier" $
             do
@@ -45,7 +46,8 @@ propertyTests = testGroup "Property tests"
 
                 let (token, location) = head tokens
                 
-                assert $ P.eq .$ ("token", token) .$ ("expected", Identifier identifier),
+                assert $ P.expect 1 .$ ("number of tokens", length tokens) 
+                assert $ P.expect (Identifier identifier) .$ ("token", fst $ head tokens),
         
         testProperty "Operator string tokenized as operator" $
             do
@@ -55,17 +57,40 @@ propertyTests = testGroup "Property tests"
 
                 let (token, location) = head tokens
                 
-                assert $ P.eq .$ ("token", token) .$ ("expected", Operator operator),
+                assert $ P.expect 1 .$ ("number of tokens", length tokens) 
+                assert $ P.expect (Operator operator) .$ ("token", fst $ head tokens),
 
         testProperty "Punctuation string tokenized as punctuation" $
             do
                 punctuation <- gen $ Gen.elem $ fromList ["(", ")", "{", "}", ";", ","]
 
                 let tokens = tokenize punctuation
-
-                let (token, location) = head tokens
                 
-                assert $ P.eq .$ ("token", token) .$ ("expected", Punctuation punctuation)
+                assert $ P.expect 1 .$ ("number of tokens", length tokens) 
+                assert $ P.expect (Punctuation punctuation) .$ ("token", fst $ head tokens),
+
+        testProperty "Comment string hash is ignored" $
+            do
+                randomString <- gen $ Gen.list (Range.between (0, 100)) $ Gen.inRange $ Range.enum (minBound, maxBound)
+                identifier <- gen genIdentifierString
+
+                let 
+                    comment = filter (== '\n') randomString
+                    source = "# " ++ comment ++ "\n" ++ identifier
+                    tokens = tokenize source
+
+                assert $ P.expect 1 .$ ("number of tokens", length tokens) 
+                assert $ P.expect (Identifier identifier) .$ ("token", fst $ head tokens),
+        
+        testProperty "Comment string forward slashes is ignored" $
+            do
+                randomString <- gen $ Gen.list (Range.between (0, 100)) $ Gen.inRange $ Range.enum (minBound, maxBound)
+                identifier <- gen genIdentifierString
+                let 
+                    comment = filter (== '\n') randomString
+                    source = "// " ++ comment ++ "\n" ++ identifier
+                    tokens = tokenize source
+                assert $ P.expect 1 .$ ("number of tokens", length tokens) 
 
     ] 
 
