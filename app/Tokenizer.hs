@@ -7,12 +7,13 @@ import Data.Char (isSpace)
 import Data.Maybe (Maybe(..))
 import Control.Applicative (asum)
 import Text.Regex.PCRE ((=~))
+import Data.Int (Int64)
 
 type SourceCode = String
 
 data Location = Location Int Int deriving (Eq, Show)
 
-data Token = IntegerLiteral Int | Identifier String | Operator String | Punctuation String deriving (Eq, Show)
+data Token = IntegerLiteral Int64 | Identifier String | Operator String | Punctuation String deriving (Eq, Show)
 
 integerLiteralRegex = "^([0-9]+)"
 identifierRegex = "^([a-zA-Z_][a-zA-Z_0-9]*)"

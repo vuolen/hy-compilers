@@ -52,7 +52,7 @@ common warnings
 
 
 library hy-compilers-lib
-    exposed-modules: Tokenizer
+    exposed-modules: Tokenizer, Parser
     hs-source-dirs: app
     build-depends: base, text, regex-pcre
     default-language: GHC2021
@@ -80,9 +80,10 @@ executable hy-compilers
 
 
 
-test-suite TokenizerTest
+test-suite Tests
     type: exitcode-stdio-1.0
-    main-is: Tokenizer.test.hs
+    main-is: TestMain.hs
     hs-source-dirs: test
     build-depends: base, tasty, tasty-hunit, falsify, text, hy-compilers-lib
+    other-modules: TestTokenizer, TestParser
     default-language: GHC2021

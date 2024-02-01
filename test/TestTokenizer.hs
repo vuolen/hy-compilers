@@ -1,6 +1,9 @@
+module TestTokenizer where
+
 import Control.Monad (unless)
 import qualified Data.Text as T
 import Data.List.NonEmpty (fromList, append)
+import Data.Int (Int64)
 
 import Test.Tasty
 import Test.Tasty.Falsify
@@ -10,7 +13,7 @@ import Test.Falsify.Predicate as P
 import Test.Tasty.HUnit (assertEqual, testCase)
 import Tokenizer (tokenize, Token(..), Location(..))
 
-main = defaultMain $ testGroup "Tokenizer" [propertyTests, unitTests]
+tokenizerTests = testGroup "Tokenizer" [propertyTests, unitTests]
 
 genIdentifierString :: Gen String
 genIdentifierString = do
@@ -23,12 +26,11 @@ genIdentifierString = do
 
     return $ firstChar : restChars
 
-
 propertyTests = testGroup "Property tests"
     [
         testProperty "Integer string tokenized as integer literal" $
             do
-                n <- gen $ Gen.int $ Range.between (0, maxBound)
+                n <- gen $ Gen.inRange $ Range.between (0, maxBound)
                 let literal = show n
 
                 let tokens = tokenize literal 
