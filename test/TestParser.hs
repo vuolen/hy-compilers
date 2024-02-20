@@ -33,13 +33,37 @@ propertyTests = testGroup "Property tests"
                 assert $ P.expect (IntegerLiteralAST (-value)) .$ ("ast", fst $ head ast)
     ]
 
-
 unitTests = testGroup "Unit tests"
     [
         testCase "Boolean true literal" $
-            do
-                let tokens = tokenize "true"
-                    ast = parse tokens
-                
-                assertEqual "" (fst $ head ast) (BooleanLiteralAST True)
+            do assertEqual "" 
+                [(BooleanLiteralAST True, Location 0 0)]
+                (parse $ [(Identifier "true", Location 0 0)]),
+
+        testCase "Boolean false literal" $
+            do assertEqual "" 
+                [(BooleanLiteralAST False, Location 0 0)]
+                (parse $ [(Identifier "false", Location 0 0)]),
+
+        testCase "Unit value" $
+            do assertEqual "" 
+                [(UnitAST, Location 0 0)]
+                (parse $ [(Identifier "unit", Location 0 0)]),
+
+        testCase "Addition with integers" $
+            do assertEqual ""
+                [(Apply (Apply (IdentifierAST "+") (IntegerLiteralAST 1)) (IntegerLiteralAST 2), Location 0 0)]
+                (parse $ tokenize "1 + 2"),
+
+        testCase "Addition with identifiers" $
+            do assertEqual ""
+                [(Apply (Apply (IdentifierAST "+") (IdentifierAST "a")) (IdentifierAST "b"), Location 0 0)]
+                (parse $ tokenize "a + b"),
+
+        testCase "Left associative addition" $
+            do 
+                let onePlusTwo = Apply (Apply (IdentifierAST "+") (IntegerLiteralAST 1)) (IntegerLiteralAST 2)
+                assertEqual ""
+                    [(Apply (Apply (IdentifierAST "+") onePlusTwo) (IntegerLiteralAST 3), Location 0 0)]
+                    (parse $ tokenize "1 + 2 + 3")
     ]

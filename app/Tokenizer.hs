@@ -13,6 +13,14 @@ type SourceCode = String
 
 data Location = Location Int Int deriving (Eq, Show)
 
+data Source = IntLit String deriving (Eq, Show)
+
+type IntLit = String
+mkIntLit :: String -> IntLit
+mkIntLit string = case string =~ integerLiteralRegex of
+    True -> string
+    False -> error "Invalid integer literal"
+
 data Token = IntegerLiteral Int64 | Identifier String | Operator String | Punctuation String deriving (Eq, Show)
 
 integerLiteralRegex = "^([0-9]+)"

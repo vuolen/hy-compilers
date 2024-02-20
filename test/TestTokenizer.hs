@@ -11,7 +11,7 @@ import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Range qualified as Range
 import Test.Falsify.Predicate as P
 import Test.Tasty.HUnit (assertEqual, testCase)
-import Tokenizer (tokenize, Token(..), Location(..))
+import Tokenizer (tokenize, Token(..), Location(..), integerLiteralRegex, IntLit)
 
 tokenizerTests = testGroup "Tokenizer" [propertyTests, unitTests]
 
