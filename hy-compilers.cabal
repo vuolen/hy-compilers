@@ -54,7 +54,7 @@ common warnings
 library hy-compilers-lib
     exposed-modules: Tokenizer, Parser
     hs-source-dirs: app
-    build-depends: base, text, regex-pcre
+    build-depends: base, text, regex-pcre, mtl, transformers
     default-language: GHC2021
 
 
