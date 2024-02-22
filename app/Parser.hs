@@ -104,7 +104,21 @@ parseValue = do
           return expr
         _ -> return UnitAST
       return (IfAST cond thenBranch elseBranch, loc)
-    Identifier id -> return (IdentifierAST id, loc)
+    Identifier id -> do
+      maybeArgumentList <- peek
+      case maybeArgumentList of
+        Just (Punctuation "(", _) -> do
+          consume
+          let loop args = do
+                (arg, argloc) <- parseExpr
+                nextToken <- consume
+                case nextToken of
+                  (Punctuation ")", _) -> return $ args ++ [arg]
+                  (Punctuation ",", _) -> loop (arg : args)
+                  _ -> throwError $ "Unexpected token in argument list " ++ show nextToken ++ " " ++ show argloc
+          arglist <- loop []
+          return (foldl Apply (IdentifierAST id) arglist, loc)
+        _ -> return (IdentifierAST id, loc)
     Punctuation "(" -> do
       expr <- parseExpr
       consume

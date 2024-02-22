@@ -126,8 +126,19 @@ unitTests =
         do
           let ifThen = IfAST (BooleanLiteralAST True) (IntegerLiteralAST 1) UnitAST
           ast <- parseSuccess $ tokenize "if true then 1"
-          assertEqual
-            ""
-            [(ifThen, Location 0 0)]
-            ast
+          assertEqual "" [(ifThen, Location 0 0)] ast,
+      testCase "Single argument function call" $
+        do
+          ast <- parseSuccess $ tokenize "f(1)"
+          assertEqual "" [(Apply (IdentifierAST "f") (IntegerLiteralAST 1), Location 0 0)] ast,
+      testCase "Two argument function call" $
+        do
+          ast <- parseSuccess $ tokenize "f(1, 2)"
+          assertEqual "" [(Apply (Apply (IdentifierAST "f") (IntegerLiteralAST 1)) (IntegerLiteralAST 2), Location 0 0)] ast,
+      testCase
+        "Expression argument function call"
+        $ do
+          let twoPlusThree = mkBinaryApply "+" (IntegerLiteralAST 2) (IntegerLiteralAST 3)
+          ast <- parseSuccess $ tokenize "f(1, 2 + 3)"
+          assertEqual "" [(Apply (Apply (IdentifierAST "f") (IntegerLiteralAST 1)) twoPlusThree, Location 0 0)] ast
     ]
