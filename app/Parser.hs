@@ -42,13 +42,6 @@ peek = do
     [] -> return Nothing
     (token : _) -> return $ Just token
 
-peekValue :: Parser (AST, Location)
-peekValue = do
-  state <- get
-  value <- parseValue
-  put state
-  return value
-
 consume :: Parser (Token, Location)
 consume = do
   (tokens, consumed) <- get
@@ -98,6 +91,9 @@ parseValue = do
     Identifier "true" -> return (BooleanLiteralAST True, loc)
     Identifier "false" -> return (BooleanLiteralAST False, loc)
     Identifier "unit" -> return (UnitAST, loc)
+    Identifier "not" -> do
+      (expr, _) <- parseExpr
+      return (Apply (IdentifierAST "not") expr, loc)
     Identifier "if" -> do
       (cond, _) <- parseExpr
       consume -- then

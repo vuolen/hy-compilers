@@ -150,5 +150,10 @@ unitTests =
         $ do
           let twoPlusThree = mkBinaryApply "+" (IntegerLiteralAST 2) (IntegerLiteralAST 3)
           ast <- parseSuccess $ tokenize "f(1, 2 + 3)"
-          assertEqual "" [(Apply (Apply (IdentifierAST "f") (IntegerLiteralAST 1)) twoPlusThree, Location 0 0)] ast
+          assertEqual "" [(Apply (Apply (IdentifierAST "f") (IntegerLiteralAST 1)) twoPlusThree, Location 0 0)] ast,
+      testCase
+        "Unary not operator"
+        $ do
+          ast <- parseSuccess $ tokenize "not true"
+          assertEqual "" [(Apply (IdentifierAST "not") (BooleanLiteralAST True), Location 0 0)] ast
     ]
