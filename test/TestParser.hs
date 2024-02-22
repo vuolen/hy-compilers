@@ -82,47 +82,46 @@ unitTests =
           ast <- parseSuccess $ tokenize "1 + 2"
           assertEqual
             ""
-            [(mkBinaryApply "+" (IntegerLiteralAST 1) (IntegerLiteralAST 2), Location 0 0)]
+            [(applyArgs "+" [IntegerLiteralAST 1, IntegerLiteralAST 2], Location 0 0)]
             ast,
       testCase "Addition with identifiers" $
         do
           ast <- parseSuccess $ tokenize "a + b"
           assertEqual
             ""
-            [(mkBinaryApply "+" (IdentifierAST "a") (IdentifierAST "b"), Location 0 0)]
+            [(applyArgs "+" [IdentifierAST "a", IdentifierAST "b"], Location 0 0)]
             ast,
       testCase "Left associative addition of three numbers" $
         do
-          let onePlusTwo = mkBinaryApply "+" (IntegerLiteralAST 1) (IntegerLiteralAST 2)
+          let expected = foldl (applyTwo "+") (IntegerLiteralAST 1) $ map IntegerLiteralAST [2, 3]
           ast <- parseSuccess $ tokenize "1 + 2 + 3"
           assertEqual
             ""
-            [(mkBinaryApply "+" onePlusTwo (IntegerLiteralAST 3), Location 0 0)]
+            [(expected, Location 0 0)]
             ast,
       testCase "Left associative addition of four numbers" $
         do
-          let onePlusTwo = mkBinaryApply "+" (IntegerLiteralAST 1) (IntegerLiteralAST 2)
-          let onePlusTwoPlusThree = mkBinaryApply "+" onePlusTwo (IntegerLiteralAST 3)
+          let expected = foldl (applyTwo "+") (IntegerLiteralAST 1) $ map IntegerLiteralAST [2, 3, 4]
           ast <- parseSuccess $ tokenize "1 + 2 + 3 + 4"
           assertEqual
             ""
-            [(mkBinaryApply "+" onePlusTwoPlusThree (IntegerLiteralAST 4), Location 0 0)]
+            [(expected, Location 0 0)]
             ast,
       testCase "Multiply precedence over addition" $
         do
-          let twoTimesThree = mkBinaryApply "*" (IntegerLiteralAST 2) (IntegerLiteralAST 3)
+          let twoTimesThree = applyArgs "*" [IntegerLiteralAST 2, IntegerLiteralAST 3]
           ast <- parseSuccess $ tokenize "1 + 2 * 3"
           assertEqual
             ""
-            [(mkBinaryApply "+" (IntegerLiteralAST 1) twoTimesThree, Location 0 0)]
+            [(applyArgs "+" [IntegerLiteralAST 1, twoTimesThree], Location 0 0)]
             ast,
       testCase "Parentheses precedence" $
         do
-          let aPlusB = mkBinaryApply "+" (IdentifierAST "a") (IdentifierAST "b")
+          let aPlusB = applyArgs "+" [IdentifierAST "a", IdentifierAST "b"]
           ast <- parseSuccess $ tokenize "(a + b) * c"
           assertEqual
             ""
-            [(mkBinaryApply "*" aPlusB (IdentifierAST "c"), Location 0 0)]
+            [(applyArgs "*" [aPlusB, IdentifierAST "c"], Location 0 0)]
             ast,
       testCase "if then else" $
         do
@@ -148,12 +147,17 @@ unitTests =
       testCase
         "Expression argument function call"
         $ do
-          let twoPlusThree = mkBinaryApply "+" (IntegerLiteralAST 2) (IntegerLiteralAST 3)
+          let twoPlusThree = applyArgs "+" [IntegerLiteralAST 2, IntegerLiteralAST 3]
           ast <- parseSuccess $ tokenize "f(1, 2 + 3)"
           assertEqual "" [(Apply (Apply (IdentifierAST "f") (IntegerLiteralAST 1)) twoPlusThree, Location 0 0)] ast,
       testCase
         "Unary not operator"
         $ do
           ast <- parseSuccess $ tokenize "not true"
-          assertEqual "" [(Apply (IdentifierAST "not") (BooleanLiteralAST True), Location 0 0)] ast
+          assertEqual "" [(Apply (IdentifierAST "not") (BooleanLiteralAST True), Location 0 0)] ast,
+      testCase
+        "Unary not operator chaining"
+        $ do
+          ast <- parseSuccess $ tokenize "not not true"
+          assertEqual "" [(Apply (IdentifierAST "not") (Apply (IdentifierAST "not") (BooleanLiteralAST True)), Location 0 0)] ast
     ]

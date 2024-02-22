@@ -14,8 +14,11 @@ import Prelude
 
 data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST deriving (Eq, Show)
 
-mkBinaryApply :: String -> AST -> AST -> AST
-mkBinaryApply op left right = Apply (Apply (IdentifierAST op) left) right
+applyArgs :: String -> [AST] -> AST
+applyArgs op = foldl Apply (IdentifierAST op)
+
+applyTwo :: String -> AST -> AST -> AST
+applyTwo op ast1 ast2 = applyArgs op [ast1, ast2]
 
 -- precedence for binary operations
 precedence :: String -> Int
@@ -73,7 +76,7 @@ parseExpr = do
                   then do
                     consume
                     right <- parseExpr' $ precedence op + 1
-                    loop $ mkBinaryApply op left right
+                    loop $ applyArgs op [left, right]
                   else return left
               _ -> return left
       loop left
