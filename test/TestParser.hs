@@ -1,6 +1,7 @@
 module TestParser where
 
 import Data.Bool
+import Data.List.NonEmpty (fromList)
 import Parser
 import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Predicate as P
@@ -33,7 +34,16 @@ propertyTests =
           ast <- case parse tokens of
             Left err -> testFailed err
             Right result -> return result
-          assert $ P.expect (IntegerLiteralAST (-value)) .$ ("ast", fst $ head ast)
+          assert $ P.expect (IntegerLiteralAST (-value)) .$ ("ast", fst $ head ast),
+      testProperty "Binary operations supported" $
+        do
+          op <- gen $ Gen.elem $ fromList ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or", "="]
+          let tokens = tokenize $ "1 " ++ op ++ " 2"
+          let expected = [(foldl Apply (IdentifierAST op) [IntegerLiteralAST 1, IntegerLiteralAST 2], Location 0 0)]
+          ast <- case parse tokens of
+            Left err -> testFailed err
+            Right result -> return result
+          assert $ P.expect expected .$ ("ast", ast)
     ]
 
 parseSuccess :: [(Token, Location)] -> IO [(AST, Location)]

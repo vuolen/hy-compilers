@@ -17,11 +17,17 @@ data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | Identifi
 mkBinaryApply :: String -> AST -> AST -> AST
 mkBinaryApply op left right = Apply (Apply (IdentifierAST op) left) right
 
+-- precedence for binary operations
 precedence :: String -> Int
-precedence "+" = 1
-precedence "-" = 1
-precedence "*" = 2
-precedence "/" = 2
+precedence "=" = 1
+precedence "or" = 2
+precedence "and" = 3
+precedence op
+  | elem op ["==", "!="] = 4
+  | elem op ["<", ">=", ">", ">="] = 5
+  | elem op ["+", "-"] = 6
+  | elem op ["*", "/", "%"] = 7
+  | otherwise = 8
 
 type TokenStream = ([(Token, Location)], Int)
 
