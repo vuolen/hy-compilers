@@ -209,5 +209,25 @@ unitTests =
         "Block expression without intermediate semicolon fails"
         $ do
             let ast = parse $ tokenize "{ a; b c; }"
-            assertEqual "" True (isLeft ast)
+            assertEqual "" True (isLeft ast),
+      testCase 
+        "Test program passes"
+        $ do
+            let code = "{\
+                      \    while f() do {\
+                      \        x = 10;\
+                      \        y = if g(x) then {\
+                      \            x = x + 1;\
+                      \            x\
+                      \        } else {\
+                      \            g(x)\
+                      \        };  # <-- (this semicolon will become optional later)\
+                      \        g(y);\
+                      \    };  # <------ (this too)\
+                      \    123\
+                      \}"
+            let ast = parse $ tokenize code
+            case ast of
+                Left err -> assertFailure err
+                Right _ -> return ()
     ]
