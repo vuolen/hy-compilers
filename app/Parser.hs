@@ -12,7 +12,7 @@ import Tokenizer
   )
 import Prelude
 
-data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST deriving (Eq, Show)
+data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST deriving (Eq, Show) 
 
 applyArgs :: String -> [AST] -> AST
 applyArgs op = foldl Apply (IdentifierAST op)
@@ -55,6 +55,19 @@ isEmpty :: Parser Bool
 isEmpty = do
   (tokens, _) <- get
   return $ null tokens
+
+consumeIf :: Token -> Parser Bool
+consumeIf token = do
+  nextToken <- peek
+  case nextToken of
+    Just (t, _) -> do
+      if t == token
+        then do 
+          consume
+          return True
+        else
+          return False
+    Nothing -> return False
 
 parseExpr :: Parser (AST, Location)
 parseExpr = do
@@ -128,6 +141,27 @@ parseValue = do
       expr <- parseExpr
       consume
       return expr
+    Punctuation "{" -> do
+      isEmptyBlock <- consumeIf $ Punctuation "}"
+      if isEmptyBlock
+        then return (BlockAST [] UnitAST, loc)
+        else do
+          ast <- loop $ BlockAST [] UnitAST
+          return (ast, loc)
+          where
+            loop (BlockAST exprs value) = do
+              (expr, _) <- parseExpr
+              isSemicolon <- consumeIf $ Punctuation ";"
+              isBlockClose <- consumeIf $ Punctuation "}"
+
+              --terminating
+              if isBlockClose && isSemicolon then return $ BlockAST (exprs ++ [expr]) UnitAST 
+              else if isBlockClose && not isSemicolon then return $ BlockAST exprs expr
+              --looping
+              else if isSemicolon then loop $ BlockAST (exprs ++ [expr]) UnitAST
+              else throwError $ "Expected semicolon after expr " ++ show expr
+
+         
     _ -> throwError $ "Parse error at " ++ show loc ++ " with token " ++ show token
 
 parse :: [(Token, Location)] -> Either String [(AST, Location)]
@@ -140,5 +174,12 @@ parse tokens = runIdentity $ runExceptT $ evalStateT parse' (tokens, 0)
         then return []
         else do
           (ast, loc) <- parseExpr
-          rest <- parse'
-          return $ (ast, loc) : rest
+          isSemicolon <- consumeIf $ Punctuation ";"
+          stillEmpty <- isEmpty
+          -- only accept no semicolon if we are at the end of the input
+          if isSemicolon || stillEmpty
+            then do
+              rest <- parse'
+              return $ (ast, loc) : rest
+            else do
+              throwError $ "Missing semicolon at " ++ show loc
