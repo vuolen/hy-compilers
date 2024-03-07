@@ -1,8 +1,8 @@
 module TestParser where
 
 import Data.Bool
-import Data.List.NonEmpty (fromList)
 import Data.Either (isLeft)
+import Data.List.NonEmpty (fromList)
 import Debug.Trace (traceM)
 import Parser
 import Test.Falsify.Generator qualified as Gen
@@ -24,7 +24,7 @@ propertyTests =
           let literal = show value
           let tokens = tokenize literal
           ast <- case parse tokens of
-            Left err -> testFailed err
+            Left (ParserError {message}) -> testFailed message
             Right result -> return result
           assert $ P.expect 1 .$ ("number of tokens", length tokens)
           assert $ P.expect (IntegerLiteralAST value) .$ ("ast", fst $ head ast),
@@ -34,7 +34,7 @@ propertyTests =
           let literal = show value
           let tokens = tokenize $ "-" ++ literal
           ast <- case parse tokens of
-            Left err -> testFailed err
+            Left (ParserError {message}) -> testFailed message
             Right result -> return result
           assert $ P.expect (IntegerLiteralAST (-value)) .$ ("ast", fst $ head ast),
       testProperty "Binary operations supported" $
@@ -43,7 +43,7 @@ propertyTests =
           let tokens = tokenize $ "1 " ++ op ++ " 2"
           let expected = [(foldl Apply (IdentifierAST op) [IntegerLiteralAST 1, IntegerLiteralAST 2], Location 0 0)]
           ast <- case parse tokens of
-            Left err -> testFailed err
+            Left (ParserError {message}) -> testFailed message
             Right result -> return result
           assert $ P.expect expected .$ ("ast", ast),
       testProperty
@@ -62,7 +62,7 @@ propertyTests =
 
           let tokens = tokenize expr
           case parse tokens of
-            Left err -> testFailed err
+            Left (ParserError {message}) -> testFailed message
             Right _ -> return ()
     ]
 
@@ -70,7 +70,7 @@ parseSuccess :: [(Token, Location)] -> IO [(AST, Location)]
 parseSuccess tokens = do
   case parse tokens of
     Right ast -> return ast
-    Left err -> assertFailure err
+    Left err -> assertFailure $ show err
 
 unitTests =
   testGroup
@@ -156,6 +156,10 @@ unitTests =
           let ifThen = IfAST (BooleanLiteralAST True) (IntegerLiteralAST 1) UnitAST
           ast <- parseSuccess $ tokenize "if true then 1"
           assertEqual "" [(ifThen, Location 0 0)] ast,
+      testCase "No argument function call" $
+        do
+          ast <- parseSuccess $ tokenize "f()"
+          assertEqual "" [(Apply (IdentifierAST "f") UnitAST, Location 0 0)] ast,
       testCase "Single argument function call" $
         do
           ast <- parseSuccess $ tokenize "f(1)"
@@ -181,53 +185,63 @@ unitTests =
           ast <- parseSuccess $ tokenize "not not true"
           assertEqual "" [(Apply (IdentifierAST "not") (Apply (IdentifierAST "not") (BooleanLiteralAST True)), Location 0 0)] ast,
       testCase
-        "Expressions fail without semicolon" 
+        "Expressions fail without semicolon"
         $ do
-            let ast = parse $ tokenize "a + b c"
-            assertEqual "" True (isLeft ast),
+          let ast = parse $ tokenize "a + b c"
+          assertEqual "" True (isLeft ast),
       testCase
         "Expressions pass with semicolon"
         $ do
-            ast <- parseSuccess $ tokenize "a; c"
-            assertEqual "" [(IdentifierAST "a", Location 0 0), (IdentifierAST "c", Location 0 3)] ast,
+          ast <- parseSuccess $ tokenize "a; c"
+          assertEqual "" [(IdentifierAST "a", Location 0 0), (IdentifierAST "c", Location 0 3)] ast,
       testCase
         "Empty block expression"
         $ do
-            ast <- parseSuccess $ tokenize "{}"
-            assertEqual "" [(BlockAST [] UnitAST, Location 0 0)] ast,
+          ast <- parseSuccess $ tokenize "{}"
+          assertEqual "" [(BlockAST [] UnitAST, Location 0 0)] ast,
       testCase
         "Block expression without result expression"
         $ do
-            ast <- parseSuccess $ tokenize "{ a; b; c; }"
-            assertEqual "" [(BlockAST [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"] UnitAST, Location 0 0)] ast,
+          ast <- parseSuccess $ tokenize "{ a; b; c; }"
+          assertEqual "" [(BlockAST [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"] UnitAST, Location 0 0)] ast,
       testCase
         "Block expression with result expression"
         $ do
-            ast <- parseSuccess $ tokenize "{ a; b; c; d }"
-            assertEqual "" [(BlockAST [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"] (IdentifierAST "d"), Location 0 0)] ast,
+          ast <- parseSuccess $ tokenize "{ a; b; c; d }"
+          assertEqual "" [(BlockAST [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"] (IdentifierAST "d"), Location 0 0)] ast,
       testCase
         "Block expression without intermediate semicolon fails"
         $ do
-            let ast = parse $ tokenize "{ a; b c; }"
-            assertEqual "" True (isLeft ast),
-      testCase 
+          let ast = parse $ tokenize "{ a; b c; }"
+          assertEqual "" True (isLeft ast),
+      testCase
+        "While expression"
+        $ do
+          let while = applyArgs "while" [BooleanLiteralAST True, BlockAST [IdentifierAST "a"] (IdentifierAST "b")]
+          ast <- parseSuccess $ tokenize "while true do { a; b }"
+          assertEqual "" [(while, Location 0 0)] ast,
+      testCase
         "Test program passes"
         $ do
-            let code = "{\
-                      \    while f() do {\
-                      \        x = 10;\
-                      \        y = if g(x) then {\
-                      \            x = x + 1;\
-                      \            x\
-                      \        } else {\
-                      \            g(x)\
-                      \        };  # <-- (this semicolon will become optional later)\
-                      \        g(y);\
-                      \    };  # <------ (this too)\
-                      \    123\
-                      \}"
-            let ast = parse $ tokenize code
-            case ast of
-                Left err -> assertFailure err
-                Right _ -> return ()
+          let code =
+                unlines
+                  [ "{",
+                    "    while f() do {",
+                    "        x = 10;",
+                    "        y = if g(x) then {",
+                    "            x = x + 1;",
+                    "            x",
+                    "        } else {",
+                    "            g(x)",
+                    "        };  # <-- (this semicolon will become optional later)",
+                    "        g(y);",
+                    "    };  # <------ (this too)",
+                    "    123",
+                    "}"
+                  ]
+          let ast = parse $ tokenize code
+          case ast of
+            Left err -> do
+              assertFailure $ show err
+            Right _ -> return ()
     ]
