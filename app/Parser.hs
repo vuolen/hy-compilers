@@ -1,15 +1,17 @@
 module Parser where
 
+import Control.Applicative (Alternative)
 import Control.Monad.Error.Class (withError)
-import Control.Monad.Except (ExceptT, catchError, mapError, runExceptT, throwError, withExceptT)
+import Control.Monad.Except (ExceptT, MonadError, catchError, mapError, runExceptT, throwError, withExceptT)
 import Control.Monad.Identity
 import Control.Monad.Loops (untilM)
-import Control.Monad.State.Lazy (StateT, evalStateT, get, put, runStateT)
+import Control.Monad.State.Lazy (MonadState, StateT, evalStateT, get, gets, modify, put, runStateT)
 import Data.Int (Int64)
 import Data.List (uncons)
 import Data.Maybe (isJust)
 import Data.Tree (drawTree, unfoldTree)
 import Debug.Trace (trace, traceM)
+import GHC.Base (Alternative (..))
 import Tokenizer
   ( Location,
     Token (Identifier, IntegerLiteral, Operator, Punctuation),
@@ -45,51 +47,70 @@ precedence op
   | elem op ["*", "/", "%"] = 7
   | otherwise = 8
 
-type TokenStream = ([(Token, Location)], Int)
+data ParserState = ParserState
+  { tokens :: [(Token, Location)],
+    consumed :: Int
+  }
 
 type ASTStream = [(AST, Location)]
 
-data ParserError = ParserError {message :: String, ast :: Maybe AST, topLevelASTs :: Maybe ASTStream}
-
-addASTContext astContext =
-  withError
-    ( \err -> case ast err of
-        Nothing -> err {ast = Just astContext}
-        _ -> err
-    )
+data ParserError = ParserError {message :: String}
 
 instance Show ParserError where
-  show (ParserError {message, ast, topLevelASTs}) =
+  show (ParserError {message}) =
     unlines
       [ "Parser Error",
-        "Message: " ++ message,
-        "AST: " ++ maybe "Nothing" prettyPrint ast
+        "Message: " ++ message
       ]
 
 throwMessage :: forall a. String -> Parser a
-throwMessage message = throwError $ ParserError message Nothing Nothing
+throwMessage message = throwError $ ParserError message
 
-type ParserT e a = StateT TokenStream (ExceptT e Identity) a
+newtype Parser a = Parser (ExceptT ParserError (StateT ParserState Identity) a) deriving (Functor, Applicative, Monad, MonadError ParserError, MonadState ParserState)
 
-type Parser a = ParserT ParserError a
+-- yes im rolling out my own parser combinators, what are you going to do about it
+
+instance Alternative Parser where
+  empty = throwMessage "Empty parser"
+  p1 <|> p2 =
+    p1
+      `catchError` ( \_ -> do
+                       modify (\state -> state {consumed = 0})
+                       p2
+                   )
+
+satisfy :: (Token -> Bool) -> Parser (Token, Location)
+satisfy predicate = do
+  (token, loc) <- consume
+  if predicate token
+    then return (token, loc)
+    else throwMessage $ "predicate did not satisfy token " ++ show token ++ " at " ++ show loc
 
 peek :: Parser (Maybe (Token, Location))
 peek = do
-  (tokens, _) <- get
-  case tokens of
-    [] -> return Nothing
-    (token : _) -> return $ Just token
+  empty <- isEmpty
+  if empty
+    then return Nothing
+    else do
+      state <- get
+      return $ Just $ tokens state !! consumed state
 
 consume :: Parser (Token, Location)
 consume = do
-  (tokens, consumed) <- get
-  put (tail tokens, consumed + 1)
-  return (head tokens)
+  state <- get
+  empty <- isEmpty
+  if empty
+    then throwMessage "unexpected eof"
+    else do
+      let t = tokens state
+      let c = consumed state
+      put state {consumed = c + 1}
+      return (t !! c)
 
 isEmpty :: Parser Bool
 isEmpty = do
-  (tokens, _) <- get
-  return $ null tokens
+  (tokens, consumed) <- gets (\state -> (tokens state, consumed state))
+  return $ consumed == length tokens
 
 consumeIf :: Token -> Parser Bool
 consumeIf token = do
@@ -161,7 +182,7 @@ parseValue = do
       (cond, _) <- parseExpr
       consume -- do
       (body, _) <- parseExpr
-      return $ (applyArgs "while" [cond, body], loc)
+      return (applyArgs "while" [cond, body], loc)
     Identifier id -> do
       isArgumentList <- consumeIf $ Punctuation "("
       if isArgumentList
@@ -191,53 +212,48 @@ parseValue = do
       if isEmptyBlock
         then return (BlockAST [] UnitAST, loc)
         else do
-          ast <- loop $ BlockAST [] UnitAST
-          return (ast, loc)
-      where
-        loop (BlockAST exprs value) = do
-          (expr, _) <- addASTContext (BlockAST exprs value) parseExpr
-          isSemicolon <- consumeIf $ Punctuation ";"
-          isBlockClose <- consumeIf $ Punctuation "}"
+          let blockEnd = do
+                state <- get
+                let t = tokens state
+                let c = consumed state
+                case fmap fst (drop c t) of
+                  (Punctuation "}" : _) -> return True
+                  (Punctuation ";" : Punctuation "}" : _) -> return True
+                  _ -> return False
+          exprList <- parseExpressionList blockEnd
+          finalSemicolon <- consumeIf $ Punctuation ";"
+          consume -- }
+          let exprs = fmap fst exprList
+          if finalSemicolon
+            then return (BlockAST exprs UnitAST, loc)
+            else return (BlockAST (init exprs) (last exprs), loc)
+    _ -> throwMessage $ "No parser matching token " ++ show token ++ " at loc " ++ show loc
 
-          -- terminating
-          if isBlockClose && isSemicolon
-            then return $ BlockAST (exprs ++ [expr]) UnitAST
-            else
-              if isBlockClose && not isSemicolon
-                then return $ BlockAST exprs expr
-                -- looping
-                else
-                  if isSemicolon
-                    then loop $ BlockAST (exprs ++ [expr]) UnitAST
-                    else throwMessage $ "Expected semicolon after expr " ++ show expr
-    _ -> throwMessage $ "Parse error at " ++ show loc ++ " with token " ++ show token
-
-parseTopLevelExpr :: Parser (AST, Location)
-parseTopLevelExpr = do
-  (ast, loc) <- parseExpr
-  isSemicolon <- consumeIf $ Punctuation ";"
-  stillEmpty <- isEmpty
-  -- only accept no semicolon if we are at the end of the input
-  if not isSemicolon && not stillEmpty
-    then throwMessage $ "Missing semicolon after expression at " ++ show loc
-    else return (ast, loc)
-
-parseProgram :: Parser ASTStream
-parseProgram = parseProgram' []
+-- parse expressions until condition
+parseExpressionList :: Parser Bool -> Parser ASTStream
+parseExpressionList stopCondition = parseExpressionList' []
   where
-    parseProgram' :: ASTStream -> Parser ASTStream
-    parseProgram' asts = addErrorContext asts $ do
-      expr <- parseTopLevelExpr
-      empty <- isEmpty
-      if empty
-        then return $ asts ++ [expr]
-        else parseProgram' (asts ++ [expr])
-    addErrorContext asts =
-      withError
-        ( \err -> case topLevelASTs err of
-            Nothing -> err {topLevelASTs = Just asts}
-            _ -> err
-        )
+    parseExpressionList' :: ASTStream -> Parser ASTStream
+    parseExpressionList' exprs = do
+      expr <- parseExpr
+      stop <- stopCondition
+      if stop
+        then return $ exprs ++ [expr]
+        else do
+          isSemicolon <- consumeIf $ Punctuation ";"
+          let inferSemicolon = case fst expr of
+                (BlockAST _ _) -> True
+                (IfAST _ (BlockAST _ _) UnitAST) -> True
+                (IfAST _ _ (BlockAST _ _)) -> True
+                _ -> False
+          if isSemicolon || inferSemicolon
+            then
+              parseExpressionList' (exprs ++ [expr])
+            else
+              throwMessage "Missing semicolon"
+
+runParser :: forall a. Parser a -> [(Token, Location)] -> Either ParserError a
+runParser (Parser parser) tokens = runIdentity $ evalStateT (runExceptT parser) (ParserState {tokens = tokens, consumed = 0})
 
 parse :: [(Token, Location)] -> Either ParserError [(AST, Location)]
-parse tokens = runIdentity $ runExceptT $ evalStateT parseProgram (tokens, 0)
+parse tokens = runParser (parseExpressionList isEmpty) tokens

@@ -1,7 +1,7 @@
 module TestParser where
 
 import Data.Bool
-import Data.Either (isLeft)
+import Data.Either (isLeft, isRight)
 import Data.List.NonEmpty (fromList)
 import Debug.Trace (traceM)
 import Parser
@@ -243,5 +243,27 @@ unitTests =
           case ast of
             Left err -> do
               assertFailure $ show err
-            Right _ -> return ()
+            Right _ -> return (),
+      testCase "Infer semicolon after block in block" $
+        do
+          let expr1 = "{ { a } { b } }"
+          let expr2 = "{ { a }; { b } }"
+          ast1 <- parseSuccess $ tokenize expr1
+          ast2 <- parseSuccess $ tokenize expr2
+          assertEqual "" ast1 ast2,
+      testCase "Infer semicolon after block in if then" $
+        do
+          let expr1 = "{if true then { a } b}"
+          let expr2 = "{if true then { a }; b}"
+          ast1 <- parseSuccess $ tokenize expr1
+          ast2 <- parseSuccess $ tokenize expr2
+          assertEqual "" ast1 ast2,
+      testCase
+        "Infer semicolon after block in if then else"
+        $ do
+          let expr1 = "{ if true then { a } else { b } 3 }"
+          let expr2 = "{ if true then { a } else { b }; 3 }"
+          ast1 <- parseSuccess $ tokenize expr1
+          ast2 <- parseSuccess $ tokenize expr2
+          assertEqual "" ast1 ast2
     ]
