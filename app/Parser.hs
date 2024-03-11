@@ -2,6 +2,7 @@
 
 module Parser
   ( AST (..),
+    ASTNode (..),
     ParserError (..),
     parse,
     applyArgs,
@@ -27,7 +28,12 @@ import Tokenizer qualified as T
   )
 import Prelude
 
-data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply AST AST | If AST AST AST | Block [AST] AST | VarDecl AST AST deriving (Eq, Show)
+data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
+
+mkASTNode :: (AST, T.Location) -> ASTNode
+mkASTNode = uncurry ASTNode
+
+data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply AST AST | If AST AST AST | Block [AST] AST | VarDecl ASTNode ASTNode deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast = drawTree $ unfoldTree unfold' ast
@@ -294,10 +300,10 @@ funCall = do
 
 variableDeclaration = do
   loc <- satisfyIdentifier "var"
-  (id, _) <- identifier
+  id <- identifier
   satisfyToken (T.Operator "=")
-  (expr, _) <- parseExpr
-  return $ (VarDecl id expr, loc)
+  expr <- parseExpr
+  return (VarDecl (mkASTNode id) (mkASTNode expr), loc)
 
 parseValue :: Parser (AST, T.Location)
 parseValue = do

@@ -4,7 +4,7 @@ import Data.Bool
 import Data.Either (isLeft, isRight)
 import Data.List.NonEmpty (fromList)
 import Debug.Trace (traceM)
-import Parser (AST (..), ParserError (..), applyArgs, applyTwo, parse)
+import Parser (AST (..), ASTNode (..), ParserError (..), applyArgs, applyTwo, parse)
 import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Predicate as P
 import Test.Falsify.Range qualified as Range
@@ -276,8 +276,8 @@ equalityTestCases =
     ( "Variable declaration in top level",
       T.tokenize "var x = 123",
       [ ( VarDecl
-            (IdentifierAST "x")
-            (IntegerLiteral 123),
+            (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 4})
+            (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 8}),
           T.Location 0 0
         )
       ]
@@ -286,7 +286,10 @@ equalityTestCases =
       T.tokenize "{var x = 123}",
       [ ( Block
             []
-            (VarDecl (IdentifierAST "x") (IntegerLiteral 123)),
+            ( VarDecl
+                (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 5})
+                (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 9})
+            ),
           T.Location 0 0
         )
       ]
