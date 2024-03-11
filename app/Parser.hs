@@ -14,15 +14,13 @@ import Data.List (uncons)
 import Data.Maybe (isJust)
 import Data.Tree (drawTree, unfoldTree)
 import Debug.Trace (trace, traceM, traceWith)
-import Tokenizer
+import Tokenizer qualified as T
   ( Location,
     Token (Identifier, IntegerLiteral, Operator, Punctuation),
   )
 import Prelude
 
-data Expr = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST | VarDeclAST AST AST deriving (Eq, Show)
-
-data AST = AST {expr :: Expr, location :: Location} deriving (Eq, Show)
+data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST | VarDeclAST AST AST deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast = drawTree $ unfoldTree unfold' ast
@@ -54,13 +52,13 @@ precedence op
 
 data ParserState
   = ParserState
-  { tokens :: [(Token, Location)],
+  { tokens :: [(T.Token, T.Location)],
     consumed :: Int
   }
   deriving
     (Eq, Show)
 
-type ASTStream = [(AST, Location)]
+type ASTStream = [(AST, T.Location)]
 
 data ParserError = ParserError {message :: String}
 
@@ -92,7 +90,7 @@ instance Alternative Parser where
                          p2
                    )
 
-satisfy :: (Token -> Bool) -> Parser (Token, Location)
+satisfy :: (T.Token -> Bool) -> Parser (T.Token, T.Location)
 satisfy predicate = do
   token <- peek
   case token of
@@ -105,11 +103,11 @@ satisfy predicate = do
           else throwMessage $ "predicate did not satisfy token " ++ show token ++ " at " ++ show loc
     _ -> throwMessage "unexpected eof"
 
-satisfyToken :: Token -> Parser (Token, Location)
+satisfyToken :: T.Token -> Parser (T.Token, T.Location)
 satisfyToken token = satisfy (== token)
 
 -- return only location, since the token is obvious
-satisfyIdentifier id = snd <$> satisfy (== Identifier id)
+satisfyIdentifier id = snd <$> satisfy (== T.Identifier id)
 
 many :: Parser a -> Parser [a]
 many p = many1 p <|> return []
@@ -123,7 +121,7 @@ many1 p = do
 optional :: Parser a -> Parser Bool
 optional p = (p >> return True) <|> return False
 
-peek :: Parser (Maybe (Token, Location))
+peek :: Parser (Maybe (T.Token, T.Location))
 peek = do
   empty <- isEmpty
   if empty
@@ -132,7 +130,7 @@ peek = do
       state <- get
       return $ Just $ tokens state !! consumed state
 
-consume :: Parser (Token, Location)
+consume :: Parser (T.Token, T.Location)
 consume = do
   state <- get
   empty <- isEmpty
@@ -149,7 +147,7 @@ isEmpty = do
   (tokens, consumed) <- gets (\state -> (tokens state, consumed state))
   return $ consumed == length tokens
 
-consumeIf :: Token -> Parser Bool
+consumeIf :: T.Token -> Parser Bool
 consumeIf token = do
   nextToken <- peek
   case nextToken of
@@ -162,7 +160,7 @@ consumeIf token = do
           return False
     Nothing -> return False
 
-parseExpr :: Parser (AST, Location)
+parseExpr :: Parser (AST, T.Location)
 parseExpr = do
   nextToken <- peek
   case nextToken of
@@ -177,7 +175,7 @@ parseExpr = do
       let loop left = do
             nextToken <- peek
             case nextToken of
-              Just (Operator op, _) ->
+              Just (T.Operator op, _) ->
                 if precedence op >= prec
                   then do
                     consume
@@ -191,31 +189,31 @@ semicolon :: Parser ()
 semicolon = semicolon' <|> inferSemicolon
   where
     semicolon' = do
-      satisfyToken (Punctuation ";")
+      satisfyToken (T.Punctuation ";")
       return ()
     inferSemicolon = do
       state <- get
       let previous = tokens state !! (consumed state - 1)
       next <- peek
       case (previous, next) of
-        ((Punctuation "}", _), Just (Punctuation "}", loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
-        ((Punctuation "}", _), _) -> return ()
+        ((T.Punctuation "}", _), Just (T.Punctuation "}", loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
+        ((T.Punctuation "}", _), _) -> return ()
         (_, Just (_, loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
 
 integerLiteral = do
-  (IntegerLiteral value, loc) <- satisfy isIntegerLiteral
+  (T.IntegerLiteral value, loc) <- satisfy isIntegerLiteral
   return (IntegerLiteralAST value, loc)
   where
     isIntegerLiteral token = case token of
-      IntegerLiteral _ -> True
+      T.IntegerLiteral _ -> True
       _ -> False
 
 identifier = do
-  ((Identifier id), loc) <- satisfy isIdentifier
+  ((T.Identifier id), loc) <- satisfy isIdentifier
   return (IdentifierAST id, loc)
   where
     isIdentifier token = case token of
-      Identifier _ -> True
+      T.Identifier _ -> True
       _ -> False
 
 boolean = do
@@ -233,7 +231,7 @@ unaryOperator = not <|> negate
       (expr, _) <- parseExpr
       return (applyArgs "not" [expr], loc)
     negate = do
-      (_, loc) <- satisfyToken (Operator "-")
+      (_, loc) <- satisfyToken (T.Operator "-")
       (expr, _) <- parseExpr
       return (applyArgs "-" [expr], loc)
 
@@ -258,7 +256,7 @@ while = do
   return (applyArgs "while" [cond, body], loc)
 
 block = do
-  (_, loc) <- satisfyToken (Punctuation "{")
+  (_, loc) <- satisfyToken (T.Punctuation "{")
   exprs <- many $ do
     expr <- variableDeclaration <|> parseExpr
     semicolon
@@ -268,10 +266,10 @@ block = do
   where
     valueExpr = do
       (expr, _) <- variableDeclaration <|> parseExpr
-      satisfyToken (Punctuation "}")
+      satisfyToken (T.Punctuation "}")
       return expr
     noValueExpr = do
-      satisfyToken (Punctuation "}")
+      satisfyToken (T.Punctuation "}")
       return UnitAST
 
 funCall = do
@@ -280,21 +278,21 @@ funCall = do
   return (applyArgs id args, loc)
   where
     argumentList = do
-      satisfyToken $ Punctuation "("
+      satisfyToken $ T.Punctuation "("
       args <- many $ do
         (expr, _) <- parseExpr
         return expr
-      satisfyToken $ Punctuation ")"
+      satisfyToken $ T.Punctuation ")"
       return args
 
 variableDeclaration = do
   loc <- satisfyIdentifier "var"
   (id, _) <- identifier
-  satisfyToken (Operator "=")
+  satisfyToken (T.Operator "=")
   (expr, _) <- parseExpr
   return $ (VarDeclAST id expr, loc)
 
-parseValue :: Parser (AST, Location)
+parseValue :: Parser (AST, T.Location)
 parseValue = do
   foldr (<|>) noMatch [funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, old]
   where
@@ -305,11 +303,11 @@ parseValue = do
     old = do
       (token, loc) <- consume
       case token of
-        Identifier id -> do
-          isArgumentList <- consumeIf $ Punctuation "("
+        T.Identifier id -> do
+          isArgumentList <- consumeIf $ T.Punctuation "("
           if isArgumentList
             then do
-              isEmptyArgumentList <- consumeIf $ Punctuation ")"
+              isEmptyArgumentList <- consumeIf $ T.Punctuation ")"
               if isEmptyArgumentList
                 then return $ (applyArgs id [UnitAST], loc)
                 else do
@@ -322,10 +320,10 @@ parseValue = do
               (arg, argloc) <- parseExpr
               nextToken <- consume
               case nextToken of
-                (Punctuation ")", _) -> return $ args ++ [arg]
-                (Punctuation ",", _) -> loop (arg : args)
+                (T.Punctuation ")", _) -> return $ args ++ [arg]
+                (T.Punctuation ",", _) -> loop (arg : args)
                 _ -> throwMessage $ "Unexpected token in argument list " ++ show nextToken ++ " " ++ show argloc
-        Punctuation "(" -> do
+        T.Punctuation "(" -> do
           expr <- parseExpr
           consume
           return expr
@@ -345,8 +343,8 @@ parseExpressionList stopCondition = parseExpressionList' []
           semicolon
           parseExpressionList' (exprs ++ [expr])
 
-runParser :: forall a. Parser a -> [(Token, Location)] -> Either ParserError a
+runParser :: forall a. Parser a -> [(T.Token, T.Location)] -> Either ParserError a
 runParser (Parser parser) tokens = runIdentity $ evalStateT (runExceptT parser) (ParserState {tokens = tokens, consumed = 0})
 
-parse :: [(Token, Location)] -> Either ParserError [(AST, Location)]
+parse :: [(T.Token, T.Location)] -> Either ParserError [(AST, T.Location)]
 parse tokens = runParser (parseExpressionList isEmpty) tokens
