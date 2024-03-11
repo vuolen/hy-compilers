@@ -1,6 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Parser where
+module Parser
+  ( AST (..),
+    ParserError (..),
+    parse,
+    applyArgs,
+    applyTwo,
+  )
+where
 
 import Control.Applicative (Alternative (empty, (<|>)), asum)
 import Control.Exception (throw)

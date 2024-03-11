@@ -4,7 +4,7 @@ import Data.Bool
 import Data.Either (isLeft, isRight)
 import Data.List.NonEmpty (fromList)
 import Debug.Trace (traceM)
-import Parser
+import Parser (AST (..), ParserError (..), applyArgs, applyTwo, parse)
 import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Predicate as P
 import Test.Falsify.Range qualified as Range
