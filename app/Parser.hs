@@ -20,7 +20,9 @@ import Tokenizer
   )
 import Prelude
 
-data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST deriving (Eq, Show)
+data Expr = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST | VarDeclAST AST AST deriving (Eq, Show)
+
+data AST = AST {expr :: Expr, location :: Location} deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast = drawTree $ unfoldTree unfold' ast
@@ -196,18 +198,24 @@ semicolon = semicolon' <|> inferSemicolon
       let previous = tokens state !! (consumed state - 1)
       next <- peek
       case (previous, next) of
-        ((Punctuation "}", loc), Just (Punctuation "}", _)) -> throwMessage $ "Expected semicolon after token at " ++ show loc
+        ((Punctuation "}", _), Just (Punctuation "}", loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
         ((Punctuation "}", _), _) -> return ()
-        ((_, loc), _) -> throwMessage $ "Expected semicolon after token at " ++ show loc
+        (_, Just (_, loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
 
 integerLiteral = do
-  (token, loc) <- satisfy isIntegerLiteral
-  case token of
-    IntegerLiteral value -> return (IntegerLiteralAST value, loc)
-    _ -> throwMessage "unexpected token"
+  (IntegerLiteral value, loc) <- satisfy isIntegerLiteral
+  return (IntegerLiteralAST value, loc)
   where
     isIntegerLiteral token = case token of
       IntegerLiteral _ -> True
+      _ -> False
+
+identifier = do
+  ((Identifier id), loc) <- satisfy isIdentifier
+  return (IdentifierAST id, loc)
+  where
+    isIdentifier token = case token of
+      Identifier _ -> True
       _ -> False
 
 boolean = do
@@ -252,14 +260,14 @@ while = do
 block = do
   (_, loc) <- satisfyToken (Punctuation "{")
   exprs <- many $ do
-    expr <- parseExpr
+    expr <- variableDeclaration <|> parseExpr
     semicolon
     return expr
   value <- valueExpr <|> noValueExpr
   return (BlockAST (fmap fst exprs) value, loc)
   where
     valueExpr = do
-      (expr, _) <- parseExpr
+      (expr, _) <- variableDeclaration <|> parseExpr
       satisfyToken (Punctuation "}")
       return expr
     noValueExpr = do
@@ -267,12 +275,7 @@ block = do
       return UnitAST
 
 funCall = do
-  (Identifier id, loc) <-
-    satisfy
-      ( \case
-          Identifier _ -> True
-          _ -> False
-      )
+  (IdentifierAST id, loc) <- identifier
   args <- argumentList
   return (applyArgs id args, loc)
   where
@@ -283,6 +286,13 @@ funCall = do
         return expr
       satisfyToken $ Punctuation ")"
       return args
+
+variableDeclaration = do
+  loc <- satisfyIdentifier "var"
+  (id, _) <- identifier
+  satisfyToken (Operator "=")
+  (expr, _) <- parseExpr
+  return $ (VarDeclAST id expr, loc)
 
 parseValue :: Parser (AST, Location)
 parseValue = do
@@ -327,7 +337,7 @@ parseExpressionList stopCondition = parseExpressionList' []
   where
     parseExpressionList' :: ASTStream -> Parser ASTStream
     parseExpressionList' exprs = do
-      expr <- parseExpr
+      expr <- variableDeclaration <|> parseExpr
       stop <- stopCondition
       if stop
         then return $ exprs ++ [expr]

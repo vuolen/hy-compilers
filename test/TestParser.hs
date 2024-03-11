@@ -273,5 +273,20 @@ unitTests =
           let expr2 = "{ while true do { a }; 3 }"
           ast1 <- parseSuccess $ tokenize expr1
           ast2 <- parseSuccess $ tokenize expr2
-          assertEqual "" ast1 ast2
+          assertEqual "" ast1 ast2,
+      testCase
+        "Variable declaration in top level"
+        $ do
+          ast <- parseSuccess $ tokenize "var x = 123"
+          assertEqual "" [(VarDeclAST (IdentifierAST "x") (IntegerLiteralAST 123), Location 0 0)] ast,
+      testCase
+        "Variable declaration in if then does not pass"
+        $ do
+          let ast = parse $ tokenize "if true then var x = 3"
+          assertEqual "" True (isLeft ast),
+      testCase
+        "Variable declaration in block"
+        $ do
+          ast <- parseSuccess $ tokenize "{var x = 123}"
+          assertEqual "" [(BlockAST [] (VarDeclAST (IdentifierAST "x") (IntegerLiteralAST 123)), Location 0 0)] ast
     ]
