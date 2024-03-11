@@ -27,7 +27,7 @@ import Tokenizer qualified as T
   )
 import Prelude
 
-data AST = IntegerLiteralAST Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST | VarDeclAST AST AST deriving (Eq, Show)
+data AST = IntegerLiteral Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST | VarDeclAST AST AST deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast = drawTree $ unfoldTree unfold' ast
@@ -209,7 +209,7 @@ semicolon = semicolon' <|> inferSemicolon
 
 integerLiteral = do
   (T.IntegerLiteral value, loc) <- satisfy isIntegerLiteral
-  return (IntegerLiteralAST value, loc)
+  return (IntegerLiteral value, loc)
   where
     isIntegerLiteral token = case token of
       T.IntegerLiteral _ -> True
