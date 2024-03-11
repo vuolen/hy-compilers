@@ -1,6 +1,9 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Parser where
 
-import Control.Applicative (Alternative)
+import Control.Applicative (Alternative (empty, (<|>)), asum)
+import Control.Exception (throw)
 import Control.Monad.Error.Class (withError)
 import Control.Monad.Except (ExceptT, MonadError, catchError, mapError, runExceptT, throwError, withExceptT)
 import Control.Monad.Identity
@@ -10,8 +13,7 @@ import Data.Int (Int64)
 import Data.List (uncons)
 import Data.Maybe (isJust)
 import Data.Tree (drawTree, unfoldTree)
-import Debug.Trace (trace, traceM)
-import GHC.Base (Alternative (..))
+import Debug.Trace (trace, traceM, traceWith)
 import Tokenizer
   ( Location,
     Token (Identifier, IntegerLiteral, Operator, Punctuation),
@@ -30,7 +32,8 @@ prettyPrint ast = drawTree $ unfoldTree unfold' ast
     unfold' ast = (show ast, [])
 
 applyArgs :: String -> [AST] -> AST
-applyArgs op = foldl Apply (IdentifierAST op)
+applyArgs op [] = applyArgs op [UnitAST]
+applyArgs op args = foldl Apply (IdentifierAST op) args
 
 applyTwo :: String -> AST -> AST -> AST
 applyTwo op ast1 ast2 = applyArgs op [ast1, ast2]
@@ -47,10 +50,13 @@ precedence op
   | elem op ["*", "/", "%"] = 7
   | otherwise = 8
 
-data ParserState = ParserState
+data ParserState
+  = ParserState
   { tokens :: [(Token, Location)],
     consumed :: Int
   }
+  deriving
+    (Eq, Show)
 
 type ASTStream = [(AST, Location)]
 
@@ -68,23 +74,52 @@ throwMessage message = throwError $ ParserError message
 
 newtype Parser a = Parser (ExceptT ParserError (StateT ParserState Identity) a) deriving (Functor, Applicative, Monad, MonadError ParserError, MonadState ParserState)
 
+instance MonadFail Parser where
+  fail _ = throwMessage "Failed to match pattern"
+
 -- yes im rolling out my own parser combinators, what are you going to do about it
 
 instance Alternative Parser where
   empty = throwMessage "Empty parser"
-  p1 <|> p2 =
+  p1 <|> p2 = do
+    oldState <- get
     p1
-      `catchError` ( \_ -> do
-                       modify (\state -> state {consumed = 0})
-                       p2
+      `catchError` ( \err ->
+                       do
+                         put oldState
+                         p2
                    )
 
 satisfy :: (Token -> Bool) -> Parser (Token, Location)
 satisfy predicate = do
-  (token, loc) <- consume
-  if predicate token
-    then return (token, loc)
-    else throwMessage $ "predicate did not satisfy token " ++ show token ++ " at " ++ show loc
+  token <- peek
+  case token of
+    Just (token, loc) ->
+      do
+        if predicate token
+          then do
+            consume
+            return (token, loc)
+          else throwMessage $ "predicate did not satisfy token " ++ show token ++ " at " ++ show loc
+    _ -> throwMessage "unexpected eof"
+
+satisfyToken :: Token -> Parser (Token, Location)
+satisfyToken token = satisfy (== token)
+
+-- return only location, since the token is obvious
+satisfyIdentifier id = snd <$> satisfy (== Identifier id)
+
+many :: Parser a -> Parser [a]
+many p = many1 p <|> return []
+
+many1 :: Parser a -> Parser [a]
+many1 p = do
+  x <- p
+  xs <- many p
+  return $ x : xs
+
+optional :: Parser a -> Parser Bool
+optional p = (p >> return True) <|> return False
 
 peek :: Parser (Maybe (Token, Location))
 peek = do
@@ -150,84 +185,141 @@ parseExpr = do
               _ -> return left
       loop left
 
+semicolon :: Parser ()
+semicolon = semicolon' <|> inferSemicolon
+  where
+    semicolon' = do
+      satisfyToken (Punctuation ";")
+      return ()
+    inferSemicolon = do
+      state <- get
+      let previous = tokens state !! (consumed state - 1)
+      next <- peek
+      case (previous, next) of
+        ((Punctuation "}", loc), Just (Punctuation "}", _)) -> throwMessage $ "Expected semicolon after token at " ++ show loc
+        ((Punctuation "}", _), _) -> return ()
+        ((_, loc), _) -> throwMessage $ "Expected semicolon after token at " ++ show loc
+
+integerLiteral = do
+  (token, loc) <- satisfy isIntegerLiteral
+  case token of
+    IntegerLiteral value -> return (IntegerLiteralAST value, loc)
+    _ -> throwMessage "unexpected token"
+  where
+    isIntegerLiteral token = case token of
+      IntegerLiteral _ -> True
+      _ -> False
+
+boolean = do
+  true <|> false
+  where
+    true = (BooleanLiteralAST True,) <$> satisfyIdentifier "true"
+    false = (BooleanLiteralAST False,) <$> satisfyIdentifier "false"
+
+unit = (UnitAST,) <$> satisfyIdentifier "unit"
+
+unaryOperator = not <|> negate
+  where
+    not = do
+      loc <- satisfyIdentifier "not"
+      (expr, _) <- parseExpr
+      return (applyArgs "not" [expr], loc)
+    negate = do
+      (_, loc) <- satisfyToken (Operator "-")
+      (expr, _) <- parseExpr
+      return (applyArgs "-" [expr], loc)
+
+ifExpr = do
+  loc <- satisfyIdentifier "if"
+  (condExpr, _) <- parseExpr
+  satisfyIdentifier "then"
+  (thenExpr, _) <- parseExpr
+  elseBranch <- elseBranch <|> return UnitAST
+  return (IfAST condExpr thenExpr elseBranch, loc)
+  where
+    elseBranch = do
+      satisfyIdentifier "else"
+      (elseExpr, _) <- parseExpr
+      return elseExpr
+
+while = do
+  loc <- satisfyIdentifier "while"
+  (cond, _) <- parseExpr
+  satisfyIdentifier "do"
+  (body, _) <- parseExpr
+  return (applyArgs "while" [cond, body], loc)
+
+block = do
+  (_, loc) <- satisfyToken (Punctuation "{")
+  exprs <- many $ do
+    expr <- parseExpr
+    semicolon
+    return expr
+  value <- valueExpr <|> noValueExpr
+  return (BlockAST (fmap fst exprs) value, loc)
+  where
+    valueExpr = do
+      (expr, _) <- parseExpr
+      satisfyToken (Punctuation "}")
+      return expr
+    noValueExpr = do
+      satisfyToken (Punctuation "}")
+      return UnitAST
+
+funCall = do
+  (Identifier id, loc) <-
+    satisfy
+      ( \case
+          Identifier _ -> True
+          _ -> False
+      )
+  args <- argumentList
+  return (applyArgs id args, loc)
+  where
+    argumentList = do
+      satisfyToken $ Punctuation "("
+      args <- many $ do
+        (expr, _) <- parseExpr
+        return expr
+      satisfyToken $ Punctuation ")"
+      return args
+
 parseValue :: Parser (AST, Location)
 parseValue = do
-  (token, loc) <- consume
-  case token of
-    IntegerLiteral n -> return (IntegerLiteralAST n, loc)
-    Operator "-" -> do
+  foldr (<|>) noMatch [funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, old]
+  where
+    noMatch = do
+      token <- peek
+      throwMessage $ "no parser matched token " ++ show token
+    -- old parser to be removed
+    old = do
       (token, loc) <- consume
       case token of
-        IntegerLiteral n -> return (IntegerLiteralAST (-n), loc)
-        _ -> throwMessage $ "Parse error at " ++ show loc ++ " with token " ++ show token
-    Identifier "true" -> return (BooleanLiteralAST True, loc)
-    Identifier "false" -> return (BooleanLiteralAST False, loc)
-    Identifier "unit" -> return (UnitAST, loc)
-    Identifier "not" -> do
-      (expr, _) <- parseExpr
-      return (Apply (IdentifierAST "not") expr, loc)
-    Identifier "if" -> do
-      (cond, _) <- parseExpr
-      consume -- then
-      (thenBranch, _) <- parseExpr
-      elseKeyword <- peek
-      elseBranch <- case elseKeyword of
-        Just (Identifier "else", _) -> do
+        Identifier id -> do
+          isArgumentList <- consumeIf $ Punctuation "("
+          if isArgumentList
+            then do
+              isEmptyArgumentList <- consumeIf $ Punctuation ")"
+              if isEmptyArgumentList
+                then return $ (applyArgs id [UnitAST], loc)
+                else do
+                  arglist <- loop []
+                  return (foldl Apply (IdentifierAST id) arglist, loc)
+            else
+              return (IdentifierAST id, loc)
+          where
+            loop args = do
+              (arg, argloc) <- parseExpr
+              nextToken <- consume
+              case nextToken of
+                (Punctuation ")", _) -> return $ args ++ [arg]
+                (Punctuation ",", _) -> loop (arg : args)
+                _ -> throwMessage $ "Unexpected token in argument list " ++ show nextToken ++ " " ++ show argloc
+        Punctuation "(" -> do
+          expr <- parseExpr
           consume
-          (expr, _) <- parseExpr
           return expr
-        _ -> return UnitAST
-      return (IfAST cond thenBranch elseBranch, loc)
-    Identifier "while" -> do
-      (cond, _) <- parseExpr
-      consume -- do
-      (body, _) <- parseExpr
-      return (applyArgs "while" [cond, body], loc)
-    Identifier id -> do
-      isArgumentList <- consumeIf $ Punctuation "("
-      if isArgumentList
-        then do
-          isEmptyArgumentList <- consumeIf $ Punctuation ")"
-          if isEmptyArgumentList
-            then return $ (applyArgs id [UnitAST], loc)
-            else do
-              arglist <- loop []
-              return (foldl Apply (IdentifierAST id) arglist, loc)
-        else
-          return (IdentifierAST id, loc)
-      where
-        loop args = do
-          (arg, argloc) <- parseExpr
-          nextToken <- consume
-          case nextToken of
-            (Punctuation ")", _) -> return $ args ++ [arg]
-            (Punctuation ",", _) -> loop (arg : args)
-            _ -> throwMessage $ "Unexpected token in argument list " ++ show nextToken ++ " " ++ show argloc
-    Punctuation "(" -> do
-      expr <- parseExpr
-      consume
-      return expr
-    Punctuation "{" -> do
-      isEmptyBlock <- consumeIf $ Punctuation "}"
-      if isEmptyBlock
-        then return (BlockAST [] UnitAST, loc)
-        else do
-          let blockEnd = do
-                state <- get
-                let t = tokens state
-                let c = consumed state
-                case fmap fst (drop c t) of
-                  (Punctuation "}" : _) -> return True
-                  (Punctuation ";" : Punctuation "}" : _) -> return True
-                  _ -> return False
-          exprList <- parseExpressionList blockEnd
-          finalSemicolon <- consumeIf $ Punctuation ";"
-          consume -- }
-          let exprs = fmap fst exprList
-          if finalSemicolon
-            then return (BlockAST exprs UnitAST, loc)
-            else return (BlockAST (init exprs) (last exprs), loc)
-    _ -> throwMessage $ "No parser matching token " ++ show token ++ " at loc " ++ show loc
+        _ -> throwMessage $ "No parser matching token " ++ show token ++ " at loc " ++ show loc
 
 -- parse expressions until condition
 parseExpressionList :: Parser Bool -> Parser ASTStream
@@ -240,17 +332,8 @@ parseExpressionList stopCondition = parseExpressionList' []
       if stop
         then return $ exprs ++ [expr]
         else do
-          isSemicolon <- consumeIf $ Punctuation ";"
-          let inferSemicolon = case fst expr of
-                (BlockAST _ _) -> True
-                (IfAST _ (BlockAST _ _) UnitAST) -> True
-                (IfAST _ _ (BlockAST _ _)) -> True
-                _ -> False
-          if isSemicolon || inferSemicolon
-            then
-              parseExpressionList' (exprs ++ [expr])
-            else
-              throwMessage "Missing semicolon"
+          semicolon
+          parseExpressionList' (exprs ++ [expr])
 
 runParser :: forall a. Parser a -> [(Token, Location)] -> Either ParserError a
 runParser (Parser parser) tokens = runIdentity $ evalStateT (runExceptT parser) (ParserState {tokens = tokens, consumed = 0})

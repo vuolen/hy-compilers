@@ -36,7 +36,7 @@ propertyTests =
           ast <- case parse tokens of
             Left (ParserError {message}) -> testFailed message
             Right result -> return result
-          assert $ P.expect (IntegerLiteralAST (-value)) .$ ("ast", fst $ head ast),
+          assert $ P.expect (Apply (IdentifierAST "-") (IntegerLiteralAST value)) .$ ("ast", fst $ head ast),
       testProperty "Binary operations supported" $
         do
           op <- gen $ Gen.elem $ fromList ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or", "="]
@@ -263,6 +263,14 @@ unitTests =
         $ do
           let expr1 = "{ if true then { a } else { b } 3 }"
           let expr2 = "{ if true then { a } else { b }; 3 }"
+          ast1 <- parseSuccess $ tokenize expr1
+          ast2 <- parseSuccess $ tokenize expr2
+          assertEqual "" ast1 ast2,
+      testCase
+        "Infer semicolon after block in while"
+        $ do
+          let expr1 = "{ while true do { a } 3 }"
+          let expr2 = "{ while true do { a }; 3 }"
           ast1 <- parseSuccess $ tokenize expr1
           ast2 <- parseSuccess $ tokenize expr2
           assertEqual "" ast1 ast2
