@@ -86,15 +86,15 @@ equalityTestCases :: [(String, [(T.Token, T.Location)], [(AST, T.Location)])]
 equalityTestCases =
   [ ( "Boolean true literal",
       [(T.Identifier "true", T.Location 0 0)],
-      [(BooleanLiteralAST True, T.Location 0 0)]
+      [(BooleanLiteral True, T.Location 0 0)]
     ),
     ( "Boolean false literal",
       [(T.Identifier "false", T.Location 0 0)],
-      [(BooleanLiteralAST False, T.Location 0 0)]
+      [(BooleanLiteral False, T.Location 0 0)]
     ),
     ( "Unit value",
       [(T.Identifier "unit", T.Location 0 0)],
-      [(UnitAST, T.Location 0 0)]
+      [(Unit, T.Location 0 0)]
     ),
     ( "Addition with integers",
       T.tokenize "1 + 2",
@@ -170,8 +170,8 @@ equalityTestCases =
     ),
     ( "if then else",
       T.tokenize "if true then 1 else 2",
-      [ ( IfAST
-            (BooleanLiteralAST True)
+      [ ( If
+            (BooleanLiteral True)
             (IntegerLiteral 1)
             (IntegerLiteral 2),
           T.Location 0 0
@@ -180,17 +180,17 @@ equalityTestCases =
     ),
     ( "if then",
       T.tokenize "if true then 1",
-      [ ( IfAST
-            (BooleanLiteralAST True)
+      [ ( If
+            (BooleanLiteral True)
             (IntegerLiteral 1)
-            UnitAST,
+            Unit,
           T.Location 0 0
         )
       ]
     ),
     ( "No argument function call",
       T.tokenize "f()",
-      [(Apply (IdentifierAST "f") UnitAST, T.Location 0 0)]
+      [(Apply (IdentifierAST "f") Unit, T.Location 0 0)]
     ),
     ( "Single argument function call",
       T.tokenize "f(1)",
@@ -218,7 +218,7 @@ equalityTestCases =
       T.tokenize "not true",
       [ ( Apply
             (IdentifierAST "not")
-            (BooleanLiteralAST True),
+            (BooleanLiteral True),
           T.Location 0 0
         )
       ]
@@ -227,7 +227,7 @@ equalityTestCases =
       T.tokenize "not not true",
       [ ( Apply
             (IdentifierAST "not")
-            (Apply (IdentifierAST "not") (BooleanLiteralAST True)),
+            (Apply (IdentifierAST "not") (BooleanLiteral True)),
           T.Location 0 0
         )
       ]
@@ -242,20 +242,20 @@ equalityTestCases =
     ),
     ( "Empty block expression",
       T.tokenize "{}",
-      [(BlockAST [] UnitAST, T.Location 0 0)]
+      [(Block [] Unit, T.Location 0 0)]
     ),
     ( "Block expression without result expression",
       T.tokenize "{ a; b; c; }",
-      [ ( BlockAST
+      [ ( Block
             [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"]
-            UnitAST,
+            Unit,
           T.Location 0 0
         )
       ]
     ),
     ( "Block expression with result expression",
       T.tokenize "{ a; b; c; d }",
-      [ ( BlockAST
+      [ ( Block
             [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"]
             (IdentifierAST "d"),
           T.Location 0 0
@@ -266,8 +266,8 @@ equalityTestCases =
       T.tokenize "while true do { a; b }",
       [ ( applyArgs
             "while"
-            [ BooleanLiteralAST True,
-              BlockAST [IdentifierAST "a"] (IdentifierAST "b")
+            [ BooleanLiteral True,
+              Block [IdentifierAST "a"] (IdentifierAST "b")
             ],
           T.Location 0 0
         )
@@ -275,7 +275,7 @@ equalityTestCases =
     ),
     ( "Variable declaration in top level",
       T.tokenize "var x = 123",
-      [ ( VarDeclAST
+      [ ( VarDecl
             (IdentifierAST "x")
             (IntegerLiteral 123),
           T.Location 0 0
@@ -284,9 +284,9 @@ equalityTestCases =
     ),
     ( "Variable declaration in block",
       T.tokenize "{var x = 123}",
-      [ ( BlockAST
+      [ ( Block
             []
-            (VarDeclAST (IdentifierAST "x") (IntegerLiteral 123)),
+            (VarDecl (IdentifierAST "x") (IntegerLiteral 123)),
           T.Location 0 0
         )
       ]

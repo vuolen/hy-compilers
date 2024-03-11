@@ -27,19 +27,19 @@ import Tokenizer qualified as T
   )
 import Prelude
 
-data AST = IntegerLiteral Int64 | BooleanLiteralAST Bool | UnitAST | IdentifierAST String | Apply AST AST | IfAST AST AST AST | BlockAST [AST] AST | VarDeclAST AST AST deriving (Eq, Show)
+data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply AST AST | If AST AST AST | Block [AST] AST | VarDecl AST AST deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast = drawTree $ unfoldTree unfold' ast
   where
     unfold' :: AST -> (String, [AST])
     unfold' (Apply fn arg) = ("Apply", [fn, arg])
-    unfold' (IfAST cond thenBranch elseBranch) = ("If", [cond, thenBranch, elseBranch])
-    unfold' (BlockAST exprs value) = ("Block", exprs ++ [value])
+    unfold' (If cond thenBranch elseBranch) = ("If", [cond, thenBranch, elseBranch])
+    unfold' (Block exprs value) = ("Block", exprs ++ [value])
     unfold' ast = (show ast, [])
 
 applyArgs :: String -> [AST] -> AST
-applyArgs op [] = applyArgs op [UnitAST]
+applyArgs op [] = applyArgs op [Unit]
 applyArgs op args = foldl Apply (IdentifierAST op) args
 
 applyTwo :: String -> AST -> AST -> AST
@@ -226,10 +226,10 @@ identifier = do
 boolean = do
   true <|> false
   where
-    true = (BooleanLiteralAST True,) <$> satisfyIdentifier "true"
-    false = (BooleanLiteralAST False,) <$> satisfyIdentifier "false"
+    true = (BooleanLiteral True,) <$> satisfyIdentifier "true"
+    false = (BooleanLiteral False,) <$> satisfyIdentifier "false"
 
-unit = (UnitAST,) <$> satisfyIdentifier "unit"
+unit = (Unit,) <$> satisfyIdentifier "unit"
 
 unaryOperator = not <|> negate
   where
@@ -247,8 +247,8 @@ ifExpr = do
   (condExpr, _) <- parseExpr
   satisfyIdentifier "then"
   (thenExpr, _) <- parseExpr
-  elseBranch <- elseBranch <|> return UnitAST
-  return (IfAST condExpr thenExpr elseBranch, loc)
+  elseBranch <- elseBranch <|> return Unit
+  return (If condExpr thenExpr elseBranch, loc)
   where
     elseBranch = do
       satisfyIdentifier "else"
@@ -269,7 +269,7 @@ block = do
     semicolon
     return expr
   value <- valueExpr <|> noValueExpr
-  return (BlockAST (fmap fst exprs) value, loc)
+  return (Block (fmap fst exprs) value, loc)
   where
     valueExpr = do
       (expr, _) <- variableDeclaration <|> parseExpr
@@ -277,7 +277,7 @@ block = do
       return expr
     noValueExpr = do
       satisfyToken (T.Punctuation "}")
-      return UnitAST
+      return Unit
 
 funCall = do
   (IdentifierAST id, loc) <- identifier
@@ -297,7 +297,7 @@ variableDeclaration = do
   (id, _) <- identifier
   satisfyToken (T.Operator "=")
   (expr, _) <- parseExpr
-  return $ (VarDeclAST id expr, loc)
+  return $ (VarDecl id expr, loc)
 
 parseValue :: Parser (AST, T.Location)
 parseValue = do
@@ -316,7 +316,7 @@ parseValue = do
             then do
               isEmptyArgumentList <- consumeIf $ T.Punctuation ")"
               if isEmptyArgumentList
-                then return $ (applyArgs id [UnitAST], loc)
+                then return $ (applyArgs id [Unit], loc)
                 else do
                   arglist <- loop []
                   return (foldl Apply (IdentifierAST id) arglist, loc)
