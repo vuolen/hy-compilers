@@ -82,31 +82,215 @@ equalityUnitTests =
       )
       equalityTestCases
 
+equalityTestCases :: [(String, [(T.Token, T.Location)], [(AST, T.Location)])]
 equalityTestCases =
-  [ ("Boolean true literal", [(T.Identifier "true", T.Location 0 0)], [(BooleanLiteralAST True, T.Location 0 0)]),
-    ("Boolean false literal", [(T.Identifier "false", T.Location 0 0)], [(BooleanLiteralAST False, T.Location 0 0)]),
-    ("Unit value", [(T.Identifier "unit", T.Location 0 0)], [(UnitAST, T.Location 0 0)]),
-    ("Addition with integers", T.tokenize "1 + 2", [(applyArgs "+" [IntegerLiteral 1, IntegerLiteral 2], T.Location 0 0)]),
-    ("Addition with identifiers", T.tokenize "a + b", [(applyArgs "+" [IdentifierAST "a", IdentifierAST "b"], T.Location 0 0)]),
-    ("Left associative addition of three numbers", T.tokenize "1 + 2 + 3", [(foldl (applyTwo "+") (IntegerLiteral 1) $ map IntegerLiteral [2, 3], T.Location 0 0)]),
-    ("Left associative addition of four numbers", T.tokenize "1 + 2 + 3 + 4", [(foldl (applyTwo "+") (IntegerLiteral 1) $ map IntegerLiteral [2, 3, 4], T.Location 0 0)]),
-    ("Multiply precedence over addition", T.tokenize "1 + 2 * 3", [(applyArgs "+" [IntegerLiteral 1, applyArgs "*" [IntegerLiteral 2, IntegerLiteral 3]], T.Location 0 0)]),
-    ("Parentheses precedence", T.tokenize "(a + b) * c", [(applyArgs "*" [applyArgs "+" [IdentifierAST "a", IdentifierAST "b"], IdentifierAST "c"], T.Location 0 0)]),
-    ("if then else", T.tokenize "if true then 1 else 2", [(IfAST (BooleanLiteralAST True) (IntegerLiteral 1) (IntegerLiteral 2), T.Location 0 0)]),
-    ("if then", T.tokenize "if true then 1", [(IfAST (BooleanLiteralAST True) (IntegerLiteral 1) UnitAST, T.Location 0 0)]),
-    ("No argument function call", T.tokenize "f()", [(Apply (IdentifierAST "f") UnitAST, T.Location 0 0)]),
-    ("Single argument function call", T.tokenize "f(1)", [(Apply (IdentifierAST "f") (IntegerLiteral 1), T.Location 0 0)]),
-    ("Two argument function call", T.tokenize "f(1, 2)", [(Apply (Apply (IdentifierAST "f") (IntegerLiteral 1)) (IntegerLiteral 2), T.Location 0 0)]),
-    ("Expression argument function call", T.tokenize "f(1, 2 + 3)", [(Apply (Apply (IdentifierAST "f") (IntegerLiteral 1)) (applyArgs "+" [IntegerLiteral 2, IntegerLiteral 3]), T.Location 0 0)]),
-    ("Unary not operator", T.tokenize "not true", [(Apply (IdentifierAST "not") (BooleanLiteralAST True), T.Location 0 0)]),
-    ("Unary not operator chaining", T.tokenize "not not true", [(Apply (IdentifierAST "not") (Apply (IdentifierAST "not") (BooleanLiteralAST True)), T.Location 0 0)]),
-    ("Expressions pass with semicolon", T.tokenize "a; c", [(IdentifierAST "a", T.Location 0 0), (IdentifierAST "c", T.Location 0 3)]),
-    ("Empty block expression", T.tokenize "{}", [(BlockAST [] UnitAST, T.Location 0 0)]),
-    ("Block expression without result expression", T.tokenize "{ a; b; c; }", [(BlockAST [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"] UnitAST, T.Location 0 0)]),
-    ("Block expression with result expression", T.tokenize "{ a; b; c; d }", [(BlockAST [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"] (IdentifierAST "d"), T.Location 0 0)]),
-    ("While expression", T.tokenize "while true do { a; b }", [(applyArgs "while" [BooleanLiteralAST True, BlockAST [IdentifierAST "a"] (IdentifierAST "b")], T.Location 0 0)]),
-    ("Variable declaration in top level", T.tokenize "var x = 123", [(VarDeclAST (IdentifierAST "x") (IntegerLiteral 123), T.Location 0 0)]),
-    ("Variable declaration in block", T.tokenize "{var x = 123}", [(BlockAST [] (VarDeclAST (IdentifierAST "x") (IntegerLiteral 123)), T.Location 0 0)])
+  [ ( "Boolean true literal",
+      [(T.Identifier "true", T.Location 0 0)],
+      [(BooleanLiteralAST True, T.Location 0 0)]
+    ),
+    ( "Boolean false literal",
+      [(T.Identifier "false", T.Location 0 0)],
+      [(BooleanLiteralAST False, T.Location 0 0)]
+    ),
+    ( "Unit value",
+      [(T.Identifier "unit", T.Location 0 0)],
+      [(UnitAST, T.Location 0 0)]
+    ),
+    ( "Addition with integers",
+      T.tokenize "1 + 2",
+      [(applyArgs "+" [IntegerLiteral 1, IntegerLiteral 2], T.Location 0 0)]
+    ),
+    ( "Addition with identifiers",
+      T.tokenize "a + b",
+      [(applyArgs "+" [IdentifierAST "a", IdentifierAST "b"], T.Location 0 0)]
+    ),
+    ( "Left associative addition of three numbers",
+      T.tokenize "1 + 2 + 3",
+      [ ( Apply
+            ( Apply
+                (IdentifierAST "+")
+                ( Apply
+                    ( Apply
+                        (IdentifierAST "+")
+                        (IntegerLiteral 1)
+                    )
+                    (IntegerLiteral 2)
+                )
+            )
+            (IntegerLiteral 3),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Left associative addition of four numbers",
+      T.tokenize "1 + 2 + 3 + 4",
+      [ ( Apply
+            ( Apply
+                (IdentifierAST "+")
+                ( Apply
+                    ( Apply
+                        (IdentifierAST "+")
+                        ( Apply
+                            ( Apply
+                                (IdentifierAST "+")
+                                (IntegerLiteral 1)
+                            )
+                            (IntegerLiteral 2)
+                        )
+                    )
+                    (IntegerLiteral 3)
+                )
+            )
+            (IntegerLiteral 4),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Multiply precedence over addition",
+      T.tokenize "1 + 2 * 3",
+      [ ( applyArgs
+            "+"
+            [ IntegerLiteral 1,
+              applyArgs
+                "*"
+                [IntegerLiteral 2, IntegerLiteral 3]
+            ],
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Parentheses precedence",
+      T.tokenize "(a + b) * c",
+      [ ( applyArgs
+            "*"
+            [applyArgs "+" [IdentifierAST "a", IdentifierAST "b"], IdentifierAST "c"],
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "if then else",
+      T.tokenize "if true then 1 else 2",
+      [ ( IfAST
+            (BooleanLiteralAST True)
+            (IntegerLiteral 1)
+            (IntegerLiteral 2),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "if then",
+      T.tokenize "if true then 1",
+      [ ( IfAST
+            (BooleanLiteralAST True)
+            (IntegerLiteral 1)
+            UnitAST,
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "No argument function call",
+      T.tokenize "f()",
+      [(Apply (IdentifierAST "f") UnitAST, T.Location 0 0)]
+    ),
+    ( "Single argument function call",
+      T.tokenize "f(1)",
+      [(Apply (IdentifierAST "f") (IntegerLiteral 1), T.Location 0 0)]
+    ),
+    ( "Two argument function call",
+      T.tokenize "f(1, 2)",
+      [ ( Apply
+            (Apply (IdentifierAST "f") (IntegerLiteral 1))
+            (IntegerLiteral 2),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Expression argument function call",
+      T.tokenize "f(1, 2 + 3)",
+      [ ( Apply
+            (Apply (IdentifierAST "f") (IntegerLiteral 1))
+            (applyArgs "+" [IntegerLiteral 2, IntegerLiteral 3]),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Unary not operator",
+      T.tokenize "not true",
+      [ ( Apply
+            (IdentifierAST "not")
+            (BooleanLiteralAST True),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Unary not operator chaining",
+      T.tokenize "not not true",
+      [ ( Apply
+            (IdentifierAST "not")
+            (Apply (IdentifierAST "not") (BooleanLiteralAST True)),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Expressions pass with semicolon",
+      T.tokenize "a; c",
+      [ ( IdentifierAST "a",
+          T.Location 0 0
+        ),
+        (IdentifierAST "c", T.Location 0 3)
+      ]
+    ),
+    ( "Empty block expression",
+      T.tokenize "{}",
+      [(BlockAST [] UnitAST, T.Location 0 0)]
+    ),
+    ( "Block expression without result expression",
+      T.tokenize "{ a; b; c; }",
+      [ ( BlockAST
+            [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"]
+            UnitAST,
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Block expression with result expression",
+      T.tokenize "{ a; b; c; d }",
+      [ ( BlockAST
+            [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"]
+            (IdentifierAST "d"),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "While expression",
+      T.tokenize "while true do { a; b }",
+      [ ( applyArgs
+            "while"
+            [ BooleanLiteralAST True,
+              BlockAST [IdentifierAST "a"] (IdentifierAST "b")
+            ],
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Variable declaration in top level",
+      T.tokenize "var x = 123",
+      [ ( VarDeclAST
+            (IdentifierAST "x")
+            (IntegerLiteral 123),
+          T.Location 0 0
+        )
+      ]
+    ),
+    ( "Variable declaration in block",
+      T.tokenize "{var x = 123}",
+      [ ( BlockAST
+            []
+            (VarDeclAST (IdentifierAST "x") (IntegerLiteral 123)),
+          T.Location 0 0
+        )
+      ]
+    )
   ]
 
 unitTests =
