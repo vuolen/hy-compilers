@@ -350,5 +350,5 @@ parseExpressionList stopCondition = parseExpressionList' []
 runParser :: forall a. Parser a -> [(T.Token, T.Location)] -> Either ParserError a
 runParser (Parser parser) tokens = runIdentity $ evalStateT (runExceptT parser) (ParserState {tokens = tokens, consumed = 0})
 
-parse :: [(T.Token, T.Location)] -> Either ParserError [ASTNode]
+parse :: [(T.Token, T.Location)] -> Either ParserError ASTStream
 parse tokens = runParser (parseExpressionList isEmpty) tokens

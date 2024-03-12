@@ -1,7 +1,8 @@
 module Main where
-    
-import Test.Tasty
-import TestTokenizer (tokenizerTests)
-import TestParser (parserTests)
 
-main = defaultMain $ testGroup "Tests" [tokenizerTests, parserTests]
+import Test.Tasty
+import TestParser (parserTests)
+import TestTokenizer (tokenizerTests)
+import TestTypeChecker (typeCheckerTests)
+
+main = defaultMain $ testGroup "Tests" [tokenizerTests, parserTests, typeCheckerTests]

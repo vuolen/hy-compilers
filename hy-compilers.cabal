@@ -52,7 +52,7 @@ common warnings
 
 
 library hy-compilers-lib
-    exposed-modules: Tokenizer, Parser
+    exposed-modules: Tokenizer, Parser, TypeChecker
     hs-source-dirs: app
     build-depends: base, text, regex-pcre, mtl, transformers, containers, monad-loops
     default-language: GHC2021
@@ -86,5 +86,5 @@ test-suite Tests
     main-is: TestMain.hs
     hs-source-dirs: test
     build-depends: base, tasty, tasty-hunit, falsify, text, hy-compilers-lib
-    other-modules: TestTokenizer, TestParser
+    other-modules: TestTokenizer, TestParser, TestTypeChecker
     default-language: GHC2021
