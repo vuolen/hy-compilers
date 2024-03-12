@@ -26,9 +26,6 @@ import Prelude
 
 data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 
-mkASTNode :: (AST, T.Location) -> ASTNode
-mkASTNode = uncurry ASTNode
-
 data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [ASTNode] ASTNode | VarDecl ASTNode ASTNode deriving (Eq, Show)
 
 prettyPrint :: AST -> String
@@ -60,7 +57,7 @@ data ParserState
   deriving
     (Eq, Show)
 
-type ASTStream = [(AST, T.Location)]
+type ASTStream = [ASTNode]
 
 data ParserError = ParserError {message :: String}
 
@@ -171,18 +168,17 @@ consumeIf token = do
           return False
     Nothing -> return False
 
-parseExpr :: Parser (AST, T.Location)
+parseExpr :: Parser ASTNode
 parseExpr = do
   nextToken <- peek
   case nextToken of
     Nothing -> throwMessage "unexpected end of input"
     _ -> do
-      astnode <- parseExpr' 0
-      return (ast astnode, loc astnode)
+      parseExpr' 0
   where
     parseExpr' :: Int -> Parser ASTNode
     parseExpr' prec = do
-      left <- mkASTNode <$> parseValue
+      left <- parseValue
       let loop left = do
             nextToken <- peek
             case nextToken of
@@ -191,7 +187,7 @@ parseExpr = do
                   then do
                     consume
                     right <- parseExpr' $ precedence op + 1
-                    loop $ mkASTNode (Apply (mkASTNode (IdentifierAST op, opLoc)) [left, right], opLoc)
+                    loop $ ASTNode (Apply (ASTNode (IdentifierAST op) opLoc) [left, right]) opLoc
                   else return left
               _ -> return left
       loop left
@@ -211,60 +207,75 @@ semicolon = semicolon' <|> inferSemicolon
         ((T.Punctuation "}", _), _) -> return ()
         (_, Just (_, loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
 
+integerLiteral :: Parser ASTNode
 integerLiteral = do
   (T.IntegerLiteral value, loc) <- satisfy isIntegerLiteral
-  return (IntegerLiteral value, loc)
+  return $ ASTNode (IntegerLiteral value) loc
   where
     isIntegerLiteral token = case token of
       T.IntegerLiteral _ -> True
       _ -> False
 
+matchIdentifier :: String -> Parser ASTNode
+matchIdentifier match = do
+  id <- identifier
+  if ast id == IdentifierAST match
+    then return id
+    else throwMessage $ "Expected identifier " ++ match ++ " but got " ++ show (ast id)
+
+identifier :: Parser ASTNode
 identifier = do
   (T.Identifier id, loc) <- satisfy isIdentifier
-  return (IdentifierAST id, loc)
+  return $ ASTNode (IdentifierAST id) loc
   where
     isIdentifier token = case token of
       T.Identifier _ -> True
       _ -> False
 
+boolean :: Parser ASTNode
 boolean = do
   true <|> false
   where
-    true = (BooleanLiteral True,) <$> satisfyIdentifier "true"
-    false = (BooleanLiteral False,) <$> satisfyIdentifier "false"
+    true = ASTNode (BooleanLiteral True) <$> satisfyIdentifier "true"
+    false = ASTNode (BooleanLiteral False) <$> satisfyIdentifier "false"
 
-unit = (Unit,) <$> satisfyIdentifier "unit"
+unit :: Parser ASTNode
+unit = ASTNode Unit <$> satisfyIdentifier "unit"
 
 unaryOperator = not <|> negate
   where
     not = do
-      loc <- satisfyIdentifier "not"
-      expr <- mkASTNode <$> parseExpr
-      return (Apply (mkASTNode (IdentifierAST "not", loc)) [expr], loc)
+      keyword <- matchIdentifier "not"
+      expr <- parseExpr
+      return $ ASTNode (Apply keyword [expr]) (loc keyword)
     negate = do
       (_, loc) <- satisfyToken (T.Operator "-")
-      expr <- mkASTNode <$> parseExpr
-      return (Apply (mkASTNode (IdentifierAST "-", loc)) [expr], loc)
+      expr <- parseExpr
+      let keyword = ASTNode (IdentifierAST "-") loc
+      return $ ASTNode (Apply keyword [expr]) loc
 
+ifExpr :: Parser ASTNode
 ifExpr = do
-  loc <- satisfyIdentifier "if"
-  condExpr <- mkASTNode <$> parseExpr
+  keyword <- matchIdentifier "if"
+  condExpr <- parseExpr
   satisfyIdentifier "then"
-  thenExpr <- mkASTNode <$> parseExpr
-  elseBranch <- elseBranch <|> return (mkASTNode (Unit, T.NoLocation))
-  return (If condExpr thenExpr elseBranch, loc)
+  thenExpr <- parseExpr
+  elseBranch <- elseBranch <|> return (ASTNode Unit T.NoLocation)
+  return $ ASTNode (If condExpr thenExpr elseBranch) (loc keyword)
   where
     elseBranch = do
       satisfyIdentifier "else"
-      mkASTNode <$> parseExpr
+      parseExpr
 
+while :: Parser ASTNode
 while = do
-  loc <- satisfyIdentifier "while"
-  cond <- mkASTNode <$> parseExpr
+  keyword <- matchIdentifier "while"
+  cond <- parseExpr
   satisfyIdentifier "do"
-  body <- mkASTNode <$> parseExpr
-  return (Apply (mkASTNode (IdentifierAST "while", loc)) [cond, body], loc)
+  body <- parseExpr
+  return $ ASTNode (Apply keyword [cond, body]) (loc keyword)
 
+block :: Parser ASTNode
 block = do
   (_, loc) <- satisfyToken (T.Punctuation "{")
   exprs <- many $ do
@@ -272,42 +283,42 @@ block = do
     semicolon
     return expr
   value <- valueExpr <|> noValueExpr
-  return (Block (map mkASTNode exprs) value, loc)
+  return $ ASTNode (Block exprs value) loc
   where
     valueExpr = do
-      expr <- mkASTNode <$> (variableDeclaration <|> parseExpr)
+      expr <- variableDeclaration <|> parseExpr
       satisfyToken (T.Punctuation "}")
       return expr
     noValueExpr = do
       satisfyToken (T.Punctuation "}")
-      return $ mkASTNode (Unit, T.NoLocation)
+      return $ ASTNode Unit T.NoLocation
 
 funCall = do
-  id <- mkASTNode <$> identifier
+  id <- identifier
   args <- argumentList
-  return $ mkASTNode (Apply id args, loc id)
+  return $ ASTNode (Apply id args) (loc id)
   where
     argumentList = do
       (_, loc) <- satisfyToken $ T.Punctuation "("
       let comma = satisfyToken $ T.Punctuation ","
       -- if the arg list fails, return Unit
       args <-
-        map mkASTNode <$> delimited parseExpr comma <|> return [mkASTNode (Unit, loc)]
+        delimited parseExpr comma <|> return [ASTNode Unit loc]
       satisfyToken $ T.Punctuation ")"
       return args
 
-variableDeclaration :: Parser (AST, T.Location)
+variableDeclaration :: Parser ASTNode
 variableDeclaration = do
   loc <- satisfyIdentifier "var"
   id <- identifier
   satisfyToken (T.Operator "=")
   expr <- parseExpr
-  return (VarDecl (mkASTNode id) (mkASTNode expr), loc)
+  return $ ASTNode (VarDecl id expr) loc
 
-parseValue :: Parser (AST, T.Location)
+parseValue :: Parser ASTNode
 parseValue = do
   let astNodeToTuple astnode = (ast astnode, loc astnode)
-  foldr (<|>) noMatch [astNodeToTuple <$> funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, identifier, old]
+  foldr (<|>) noMatch [funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, identifier, old]
   where
     noMatch = do
       token <- peek
@@ -339,5 +350,5 @@ parseExpressionList stopCondition = parseExpressionList' []
 runParser :: forall a. Parser a -> [(T.Token, T.Location)] -> Either ParserError a
 runParser (Parser parser) tokens = runIdentity $ evalStateT (runExceptT parser) (ParserState {tokens = tokens, consumed = 0})
 
-parse :: [(T.Token, T.Location)] -> Either ParserError [(AST, T.Location)]
+parse :: [(T.Token, T.Location)] -> Either ParserError [ASTNode]
 parse tokens = runParser (parseExpressionList isEmpty) tokens

@@ -26,39 +26,42 @@ propertyTests =
           value <- gen $ Gen.inRange $ Range.between (0, maxBound)
           let literal = show value
           let tokens = T.tokenize literal
-          ast <- case parse tokens of
+          result <- case parse tokens of
             Left (ParserError {message}) -> testFailed message
             Right result -> return result
           assert $ P.expect 1 .$ ("number of tokens", length tokens)
-          assert $ P.expect (IntegerLiteral value) .$ ("ast", fst $ head ast),
+          assert $ P.expect (IntegerLiteral value) .$ ("ast", ast $ head result),
       testProperty "Negative integer literal" $
         do
           value <- gen $ Gen.inRange $ Range.between (0, maxBound)
           let literal = show value
           let tokens = T.tokenize $ "-" ++ literal
-          ast <- case parse tokens of
+          result <- case parse tokens of
             Left (ParserError {message}) -> testFailed message
             Right result -> return result
           let expected =
-                [ ( Apply
-                      (ASTNode {ast = IdentifierAST "-", loc = T.Location 0 0})
-                      [ASTNode {ast = IntegerLiteral value, loc = T.Location 0 1}],
-                    T.Location 0 0
-                  )
+                [ mkASTNode
+                    ( Apply
+                        (mkASTNode (IdentifierAST "-") (T.Location 0 0))
+                        [mkASTNode (IntegerLiteral value) (T.Location 0 1)]
+                    )
+                    (T.Location 0 0)
                 ]
-          assert $ P.expect expected .$ ("ast", ast),
-      testProperty "Binary operations supported" $
-        do
+          assert $ P.expect expected .$ ("ast", result),
+      testProperty
+        "Binary operations supported"
+        $ do
           op <- gen $ Gen.elem $ fromList ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or", "="]
           let tokens = T.tokenize $ "1 " ++ op ++ " 2"
           let expected =
-                [ ( Apply
-                      (ASTNode {ast = IdentifierAST op, loc = T.Location 0 2})
-                      [ ASTNode {ast = IntegerLiteral 1, loc = T.Location 0 0},
-                        ASTNode {ast = IntegerLiteral 2, loc = T.Location 0 (length op + 3)}
-                      ],
-                    T.Location 0 2
-                  )
+                [ mkASTNode
+                    ( Apply
+                        (mkASTNode (IdentifierAST op) (T.Location 0 2))
+                        [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
+                          mkASTNode (IntegerLiteral 2) (T.Location 0 (length op + 3))
+                        ]
+                    )
+                    (T.Location 0 2)
                 ]
           ast <- case parse tokens of
             Left (ParserError {message}) -> testFailed message
@@ -84,7 +87,7 @@ propertyTests =
             Right _ -> return ()
     ]
 
-parseSuccess :: [(T.Token, T.Location)] -> IO [(AST, T.Location)]
+parseSuccess :: [(T.Token, T.Location)] -> IO [ASTNode]
 parseSuccess tokens = do
   case parse tokens of
     Right ast -> return ast
@@ -100,58 +103,61 @@ equalityUnitTests =
       )
       equalityTestCases
 
-equalityTestCases :: [(String, [(T.Token, T.Location)], [(AST, T.Location)])]
+equalityTestCases :: [(String, [(T.Token, T.Location)], [ASTNode])]
 equalityTestCases =
   [ ( "Boolean true literal",
       [(T.Identifier "true", T.Location 0 0)],
-      [(BooleanLiteral True, T.Location 0 0)]
+      [ASTNode (BooleanLiteral True) (T.Location 0 0)]
     ),
     ( "Boolean false literal",
       [(T.Identifier "false", T.Location 0 0)],
-      [(BooleanLiteral False, T.Location 0 0)]
+      [ASTNode (BooleanLiteral False) (T.Location 0 0)]
     ),
     ( "Unit value",
       [(T.Identifier "unit", T.Location 0 0)],
-      [(Unit, T.Location 0 0)]
+      [ASTNode (Unit) (T.Location 0 0)]
     ),
     ( "Addition with integers",
       T.tokenize "1 + 2",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-            [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-              mkASTNode (IntegerLiteral 2) (T.Location 0 4)
-            ],
-          T.Location 0 2
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "+") (T.Location 0 2))
+              [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
+                mkASTNode (IntegerLiteral 2) (T.Location 0 4)
+              ]
+          )
+          (T.Location 0 2)
       ]
     ),
     ( "Addition with identifiers",
       T.tokenize "a + b",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-            [ mkASTNode (IdentifierAST "a") (T.Location 0 0),
-              mkASTNode (IdentifierAST "b") (T.Location 0 4)
-            ],
-          T.Location 0 2
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "+") (T.Location 0 2))
+              [ mkASTNode (IdentifierAST "a") (T.Location 0 0),
+                mkASTNode (IdentifierAST "b") (T.Location 0 4)
+              ]
+          )
+          (T.Location 0 2)
       ]
     ),
     ( "Left associative addition of three numbers",
       T.tokenize "1 + 2 + 3",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "+") (T.Location 0 6))
-            [ mkASTNode
-                ( Apply
-                    (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-                    [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-                      mkASTNode (IntegerLiteral 2) (T.Location 0 4)
-                    ]
-                )
-                (T.Location 0 2),
-              mkASTNode (IntegerLiteral 3) (T.Location 0 8)
-            ],
-          T.Location 0 6
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "+") (T.Location 0 6))
+              [ mkASTNode
+                  ( Apply
+                      (mkASTNode (IdentifierAST "+") (T.Location 0 2))
+                      [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
+                        mkASTNode (IntegerLiteral 2) (T.Location 0 4)
+                      ]
+                  )
+                  (T.Location 0 2),
+                mkASTNode (IntegerLiteral 3) (T.Location 0 8)
+              ]
+          )
+          (T.Location 0 6)
       ]
     ),
     ( "Left associative addition of four numbers",
@@ -174,13 +180,14 @@ equalityTestCases =
                   ]
               )
               (T.Location 0 6)
-       in [ ( Apply
-                (mkASTNode (IdentifierAST "+") (T.Location 0 10))
-                [ onePlusTwoPlusThree,
-                  mkASTNode (IntegerLiteral 4) (T.Location 0 12)
-                ],
-              T.Location 0 10
-            )
+       in [ ASTNode
+              ( Apply
+                  (mkASTNode (IdentifierAST "+") (T.Location 0 10))
+                  [ onePlusTwoPlusThree,
+                    mkASTNode (IntegerLiteral 4) (T.Location 0 12)
+                  ]
+              )
+              (T.Location 0 10)
           ]
     ),
     ( "Multiply precedence over addition",
@@ -194,13 +201,14 @@ equalityTestCases =
                   ]
               )
               (T.Location 0 6)
-       in [ ( Apply
-                (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-                [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-                  twoTimesThree
-                ],
-              T.Location 0 2
-            )
+       in [ ASTNode
+              ( Apply
+                  (mkASTNode (IdentifierAST "+") (T.Location 0 2))
+                  [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
+                    twoTimesThree
+                  ]
+              )
+              (T.Location 0 2)
           ]
     ),
     ( "Parentheses precedence",
@@ -214,62 +222,68 @@ equalityTestCases =
                   ]
               )
               (T.Location 0 3)
-       in [ ( Apply
-                (mkASTNode (IdentifierAST "*") (T.Location 0 8))
-                [ aPlusB,
-                  mkASTNode (IdentifierAST "c") (T.Location 0 10)
-                ],
-              T.Location 0 8
-            )
+       in [ ASTNode
+              ( Apply
+                  (mkASTNode (IdentifierAST "*") (T.Location 0 8))
+                  [ aPlusB,
+                    mkASTNode (IdentifierAST "c") (T.Location 0 10)
+                  ]
+              )
+              (T.Location 0 8)
           ]
     ),
     ( "if then else",
       T.tokenize "if true then 1 else 2",
-      [ ( If
-            (mkASTNode (BooleanLiteral True) (T.Location 0 3))
-            (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
-            (mkASTNode (IntegerLiteral 2) (T.Location 0 20)),
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( If
+              (mkASTNode (BooleanLiteral True) (T.Location 0 3))
+              (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
+              (mkASTNode (IntegerLiteral 2) (T.Location 0 20))
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "if then",
       T.tokenize "if true then 1",
-      [ ( If
-            (mkASTNode (BooleanLiteral True) (T.Location 0 3))
-            (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
-            (mkASTNode Unit T.NoLocation),
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( If
+              (mkASTNode (BooleanLiteral True) (T.Location 0 3))
+              (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
+              (mkASTNode Unit T.NoLocation)
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "No argument function call",
       T.tokenize "f()",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-            [mkASTNode Unit (T.Location 0 1)],
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "f") (T.Location 0 0))
+              [mkASTNode Unit (T.Location 0 1)]
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "Single argument function call",
       T.tokenize "f(1)",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-            [mkASTNode (IntegerLiteral 1) (T.Location 0 2)],
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "f") (T.Location 0 0))
+              [mkASTNode (IntegerLiteral 1) (T.Location 0 2)]
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "Two argument function call",
       T.tokenize "f(1, 2)",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-            [ mkASTNode (IntegerLiteral 1) (T.Location 0 2),
-              mkASTNode (IntegerLiteral 2) (T.Location 0 5)
-            ],
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "f") (T.Location 0 0))
+              [ mkASTNode (IntegerLiteral 1) (T.Location 0 2),
+                mkASTNode (IntegerLiteral 2) (T.Location 0 5)
+              ]
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "Expression argument function call",
@@ -283,22 +297,24 @@ equalityTestCases =
                   ]
               )
               (T.Location 0 7)
-       in [ ( Apply
-                (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-                [ mkASTNode (IntegerLiteral 1) (T.Location 0 2),
-                  twoPlusThree
-                ],
-              T.Location 0 0
-            )
+       in [ ASTNode
+              ( Apply
+                  (mkASTNode (IdentifierAST "f") (T.Location 0 0))
+                  [ mkASTNode (IntegerLiteral 1) (T.Location 0 2),
+                    twoPlusThree
+                  ]
+              )
+              (T.Location 0 0)
           ]
     ),
     ( "Unary not operator",
       T.tokenize "not true",
-      [ ( Apply
-            (mkASTNode (IdentifierAST "not") (T.Location 0 0))
-            [mkASTNode (BooleanLiteral True) (T.Location 0 4)],
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Apply
+              (mkASTNode (IdentifierAST "not") (T.Location 0 0))
+              [mkASTNode (BooleanLiteral True) (T.Location 0 4)]
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "Unary not operator chaining",
@@ -310,47 +326,48 @@ equalityTestCases =
                   [mkASTNode (BooleanLiteral True) (T.Location 0 8)]
               )
               (T.Location 0 4)
-       in [ ( Apply
-                (mkASTNode (IdentifierAST "not") (T.Location 0 0))
-                [notTrue],
-              T.Location 0 0
-            )
+       in [ ASTNode
+              ( Apply
+                  (mkASTNode (IdentifierAST "not") (T.Location 0 0))
+                  [notTrue]
+              )
+              (T.Location 0 0)
           ]
     ),
     ( "Expressions pass with semicolon",
       T.tokenize "a; c",
-      [ ( IdentifierAST "a",
-          T.Location 0 0
-        ),
-        (IdentifierAST "c", T.Location 0 3)
+      [ ASTNode (IdentifierAST "a") (T.Location 0 0),
+        ASTNode (IdentifierAST "c") (T.Location 0 3)
       ]
     ),
     ( "Empty block expression",
       T.tokenize "{}",
-      [(Block [] (mkASTNode Unit T.NoLocation), T.Location 0 0)]
+      [ASTNode (Block [] (mkASTNode Unit T.NoLocation)) (T.Location 0 0)]
     ),
     ( "Block expression without result expression",
       T.tokenize "{ a; b; c; }",
-      [ ( Block
-            [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
-              mkASTNode (IdentifierAST "b") (T.Location 0 5),
-              mkASTNode (IdentifierAST "c") (T.Location 0 8)
-            ]
-            (mkASTNode Unit T.NoLocation),
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Block
+              [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
+                mkASTNode (IdentifierAST "b") (T.Location 0 5),
+                mkASTNode (IdentifierAST "c") (T.Location 0 8)
+              ]
+              (mkASTNode Unit T.NoLocation)
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "Block expression with result expression",
       T.tokenize "{ a; b; c; d }",
-      [ ( Block
-            [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
-              mkASTNode (IdentifierAST "b") (T.Location 0 5),
-              mkASTNode (IdentifierAST "c") (T.Location 0 8)
-            ]
-            (mkASTNode (IdentifierAST "d") (T.Location 0 11)),
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Block
+              [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
+                mkASTNode (IdentifierAST "b") (T.Location 0 5),
+                mkASTNode (IdentifierAST "c") (T.Location 0 8)
+              ]
+              (mkASTNode (IdentifierAST "d") (T.Location 0 11))
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "While expression",
@@ -364,37 +381,40 @@ equalityTestCases =
                   (mkASTNode Unit T.NoLocation)
               )
               (T.Location 0 14)
-       in [ ( Apply
-                (mkASTNode (IdentifierAST "while") (T.Location 0 0))
-                [ mkASTNode (BooleanLiteral True) (T.Location 0 6),
-                  block
-                ],
-              T.Location 0 0
-            )
+       in [ ASTNode
+              ( Apply
+                  (mkASTNode (IdentifierAST "while") (T.Location 0 0))
+                  [ mkASTNode (BooleanLiteral True) (T.Location 0 6),
+                    block
+                  ]
+              )
+              (T.Location 0 0)
           ]
     ),
     ( "Variable declaration in top level",
       T.tokenize "var x = 123",
-      [ ( VarDecl
-            (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 4})
-            (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 8}),
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( VarDecl
+              (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 4})
+              (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 8})
+          )
+          (T.Location 0 0)
       ]
     ),
     ( "Variable declaration in block",
       T.tokenize "{var x = 123}",
-      [ ( Block
-            []
-            ( mkASTNode
-                ( VarDecl
-                    (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 5})
-                    (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 9})
-                )
-                (T.Location 0 1)
-            ),
-          T.Location 0 0
-        )
+      [ ASTNode
+          ( Block
+              []
+              ( mkASTNode
+                  ( VarDecl
+                      (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 5})
+                      (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 9})
+                  )
+                  (T.Location 0 1)
+              )
+          )
+          (T.Location 0 0)
       ]
     )
   ]
