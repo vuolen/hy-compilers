@@ -13,9 +13,6 @@ import Test.Tasty.Falsify
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 import Tokenizer qualified as T (Location (..), Token (..), tokenize)
 
-mkASTNode :: AST -> T.Location -> ASTNode
-mkASTNode ast loc = ASTNode {ast = ast, loc = loc}
-
 parserTests = testGroup "Parser" [propertyTests, unitTests, equalityUnitTests]
 
 propertyTests =
@@ -40,10 +37,10 @@ propertyTests =
             Left (ParserError {message}) -> testFailed message
             Right result -> return result
           let expected =
-                [ mkASTNode
+                [ ASTNode
                     ( Apply
-                        (mkASTNode (IdentifierAST "-") (T.Location 0 0))
-                        [mkASTNode (IntegerLiteral value) (T.Location 0 1)]
+                        (ASTNode (IdentifierAST "-") (T.Location 0 0))
+                        [ASTNode (IntegerLiteral value) (T.Location 0 1)]
                     )
                     (T.Location 0 0)
                 ]
@@ -54,11 +51,11 @@ propertyTests =
           op <- gen $ Gen.elem $ fromList ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or", "="]
           let tokens = T.tokenize $ "1 " ++ op ++ " 2"
           let expected =
-                [ mkASTNode
+                [ ASTNode
                     ( Apply
-                        (mkASTNode (IdentifierAST op) (T.Location 0 2))
-                        [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-                          mkASTNode (IntegerLiteral 2) (T.Location 0 (length op + 3))
+                        (ASTNode (IdentifierAST op) (T.Location 0 2))
+                        [ ASTNode (IntegerLiteral 1) (T.Location 0 0),
+                          ASTNode (IntegerLiteral 2) (T.Location 0 (length op + 3))
                         ]
                     )
                     (T.Location 0 2)
@@ -121,9 +118,9 @@ equalityTestCases =
       T.tokenize "1 + 2",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-              [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-                mkASTNode (IntegerLiteral 2) (T.Location 0 4)
+              (ASTNode (IdentifierAST "+") (T.Location 0 2))
+              [ ASTNode (IntegerLiteral 1) (T.Location 0 0),
+                ASTNode (IntegerLiteral 2) (T.Location 0 4)
               ]
           )
           (T.Location 0 2)
@@ -133,9 +130,9 @@ equalityTestCases =
       T.tokenize "a + b",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-              [ mkASTNode (IdentifierAST "a") (T.Location 0 0),
-                mkASTNode (IdentifierAST "b") (T.Location 0 4)
+              (ASTNode (IdentifierAST "+") (T.Location 0 2))
+              [ ASTNode (IdentifierAST "a") (T.Location 0 0),
+                ASTNode (IdentifierAST "b") (T.Location 0 4)
               ]
           )
           (T.Location 0 2)
@@ -145,16 +142,16 @@ equalityTestCases =
       T.tokenize "1 + 2 + 3",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "+") (T.Location 0 6))
-              [ mkASTNode
+              (ASTNode (IdentifierAST "+") (T.Location 0 6))
+              [ ASTNode
                   ( Apply
-                      (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-                      [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-                        mkASTNode (IntegerLiteral 2) (T.Location 0 4)
+                      (ASTNode (IdentifierAST "+") (T.Location 0 2))
+                      [ ASTNode (IntegerLiteral 1) (T.Location 0 0),
+                        ASTNode (IntegerLiteral 2) (T.Location 0 4)
                       ]
                   )
                   (T.Location 0 2),
-                mkASTNode (IntegerLiteral 3) (T.Location 0 8)
+                ASTNode (IntegerLiteral 3) (T.Location 0 8)
               ]
           )
           (T.Location 0 6)
@@ -163,28 +160,28 @@ equalityTestCases =
     ( "Left associative addition of four numbers",
       T.tokenize "1 + 2 + 3 + 4",
       let onePlusTwo =
-            mkASTNode
+            ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-                  [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
-                    mkASTNode (IntegerLiteral 2) (T.Location 0 4)
+                  (ASTNode (IdentifierAST "+") (T.Location 0 2))
+                  [ ASTNode (IntegerLiteral 1) (T.Location 0 0),
+                    ASTNode (IntegerLiteral 2) (T.Location 0 4)
                   ]
               )
               (T.Location 0 2)
           onePlusTwoPlusThree =
-            mkASTNode
+            ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "+") (T.Location 0 6))
+                  (ASTNode (IdentifierAST "+") (T.Location 0 6))
                   [ onePlusTwo,
-                    mkASTNode (IntegerLiteral 3) (T.Location 0 8)
+                    ASTNode (IntegerLiteral 3) (T.Location 0 8)
                   ]
               )
               (T.Location 0 6)
        in [ ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "+") (T.Location 0 10))
+                  (ASTNode (IdentifierAST "+") (T.Location 0 10))
                   [ onePlusTwoPlusThree,
-                    mkASTNode (IntegerLiteral 4) (T.Location 0 12)
+                    ASTNode (IntegerLiteral 4) (T.Location 0 12)
                   ]
               )
               (T.Location 0 10)
@@ -193,18 +190,18 @@ equalityTestCases =
     ( "Multiply precedence over addition",
       T.tokenize "1 + 2 * 3",
       let twoTimesThree =
-            mkASTNode
+            ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "*") (T.Location 0 6))
-                  [ mkASTNode (IntegerLiteral 2) (T.Location 0 4),
-                    mkASTNode (IntegerLiteral 3) (T.Location 0 8)
+                  (ASTNode (IdentifierAST "*") (T.Location 0 6))
+                  [ ASTNode (IntegerLiteral 2) (T.Location 0 4),
+                    ASTNode (IntegerLiteral 3) (T.Location 0 8)
                   ]
               )
               (T.Location 0 6)
        in [ ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "+") (T.Location 0 2))
-                  [ mkASTNode (IntegerLiteral 1) (T.Location 0 0),
+                  (ASTNode (IdentifierAST "+") (T.Location 0 2))
+                  [ ASTNode (IntegerLiteral 1) (T.Location 0 0),
                     twoTimesThree
                   ]
               )
@@ -214,19 +211,19 @@ equalityTestCases =
     ( "Parentheses precedence",
       T.tokenize "(a + b) * c",
       let aPlusB =
-            mkASTNode
+            ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "+") (T.Location 0 3))
-                  [ mkASTNode (IdentifierAST "a") (T.Location 0 1),
-                    mkASTNode (IdentifierAST "b") (T.Location 0 5)
+                  (ASTNode (IdentifierAST "+") (T.Location 0 3))
+                  [ ASTNode (IdentifierAST "a") (T.Location 0 1),
+                    ASTNode (IdentifierAST "b") (T.Location 0 5)
                   ]
               )
               (T.Location 0 3)
        in [ ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "*") (T.Location 0 8))
+                  (ASTNode (IdentifierAST "*") (T.Location 0 8))
                   [ aPlusB,
-                    mkASTNode (IdentifierAST "c") (T.Location 0 10)
+                    ASTNode (IdentifierAST "c") (T.Location 0 10)
                   ]
               )
               (T.Location 0 8)
@@ -236,9 +233,9 @@ equalityTestCases =
       T.tokenize "if true then 1 else 2",
       [ ASTNode
           ( If
-              (mkASTNode (BooleanLiteral True) (T.Location 0 3))
-              (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
-              (mkASTNode (IntegerLiteral 2) (T.Location 0 20))
+              (ASTNode (BooleanLiteral True) (T.Location 0 3))
+              (ASTNode (IntegerLiteral 1) (T.Location 0 13))
+              (ASTNode (IntegerLiteral 2) (T.Location 0 20))
           )
           (T.Location 0 0)
       ]
@@ -247,9 +244,9 @@ equalityTestCases =
       T.tokenize "if true then 1",
       [ ASTNode
           ( If
-              (mkASTNode (BooleanLiteral True) (T.Location 0 3))
-              (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
-              (mkASTNode Unit T.NoLocation)
+              (ASTNode (BooleanLiteral True) (T.Location 0 3))
+              (ASTNode (IntegerLiteral 1) (T.Location 0 13))
+              (ASTNode Unit T.NoLocation)
           )
           (T.Location 0 0)
       ]
@@ -258,8 +255,8 @@ equalityTestCases =
       T.tokenize "f()",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-              [mkASTNode Unit (T.Location 0 1)]
+              (ASTNode (IdentifierAST "f") (T.Location 0 0))
+              [ASTNode Unit (T.Location 0 1)]
           )
           (T.Location 0 0)
       ]
@@ -268,8 +265,8 @@ equalityTestCases =
       T.tokenize "f(1)",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-              [mkASTNode (IntegerLiteral 1) (T.Location 0 2)]
+              (ASTNode (IdentifierAST "f") (T.Location 0 0))
+              [ASTNode (IntegerLiteral 1) (T.Location 0 2)]
           )
           (T.Location 0 0)
       ]
@@ -278,9 +275,9 @@ equalityTestCases =
       T.tokenize "f(1, 2)",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-              [ mkASTNode (IntegerLiteral 1) (T.Location 0 2),
-                mkASTNode (IntegerLiteral 2) (T.Location 0 5)
+              (ASTNode (IdentifierAST "f") (T.Location 0 0))
+              [ ASTNode (IntegerLiteral 1) (T.Location 0 2),
+                ASTNode (IntegerLiteral 2) (T.Location 0 5)
               ]
           )
           (T.Location 0 0)
@@ -289,18 +286,18 @@ equalityTestCases =
     ( "Expression argument function call",
       T.tokenize "f(1, 2 + 3)",
       let twoPlusThree =
-            mkASTNode
+            ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "+") (T.Location 0 7))
-                  [ mkASTNode (IntegerLiteral 2) (T.Location 0 5),
-                    mkASTNode (IntegerLiteral 3) (T.Location 0 9)
+                  (ASTNode (IdentifierAST "+") (T.Location 0 7))
+                  [ ASTNode (IntegerLiteral 2) (T.Location 0 5),
+                    ASTNode (IntegerLiteral 3) (T.Location 0 9)
                   ]
               )
               (T.Location 0 7)
        in [ ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "f") (T.Location 0 0))
-                  [ mkASTNode (IntegerLiteral 1) (T.Location 0 2),
+                  (ASTNode (IdentifierAST "f") (T.Location 0 0))
+                  [ ASTNode (IntegerLiteral 1) (T.Location 0 2),
                     twoPlusThree
                   ]
               )
@@ -311,8 +308,8 @@ equalityTestCases =
       T.tokenize "not true",
       [ ASTNode
           ( Apply
-              (mkASTNode (IdentifierAST "not") (T.Location 0 0))
-              [mkASTNode (BooleanLiteral True) (T.Location 0 4)]
+              (ASTNode (IdentifierAST "not") (T.Location 0 0))
+              [ASTNode (BooleanLiteral True) (T.Location 0 4)]
           )
           (T.Location 0 0)
       ]
@@ -320,15 +317,15 @@ equalityTestCases =
     ( "Unary not operator chaining",
       T.tokenize "not not true",
       let notTrue =
-            mkASTNode
+            ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "not") (T.Location 0 4))
-                  [mkASTNode (BooleanLiteral True) (T.Location 0 8)]
+                  (ASTNode (IdentifierAST "not") (T.Location 0 4))
+                  [ASTNode (BooleanLiteral True) (T.Location 0 8)]
               )
               (T.Location 0 4)
        in [ ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "not") (T.Location 0 0))
+                  (ASTNode (IdentifierAST "not") (T.Location 0 0))
                   [notTrue]
               )
               (T.Location 0 0)
@@ -342,17 +339,17 @@ equalityTestCases =
     ),
     ( "Empty block expression",
       T.tokenize "{}",
-      [ASTNode (Block [] (mkASTNode Unit T.NoLocation)) (T.Location 0 0)]
+      [ASTNode (Block [] (ASTNode Unit T.NoLocation)) (T.Location 0 0)]
     ),
     ( "Block expression without result expression",
       T.tokenize "{ a; b; c; }",
       [ ASTNode
           ( Block
-              [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
-                mkASTNode (IdentifierAST "b") (T.Location 0 5),
-                mkASTNode (IdentifierAST "c") (T.Location 0 8)
+              [ ASTNode (IdentifierAST "a") (T.Location 0 2),
+                ASTNode (IdentifierAST "b") (T.Location 0 5),
+                ASTNode (IdentifierAST "c") (T.Location 0 8)
               ]
-              (mkASTNode Unit T.NoLocation)
+              (ASTNode Unit T.NoLocation)
           )
           (T.Location 0 0)
       ]
@@ -361,11 +358,11 @@ equalityTestCases =
       T.tokenize "{ a; b; c; d }",
       [ ASTNode
           ( Block
-              [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
-                mkASTNode (IdentifierAST "b") (T.Location 0 5),
-                mkASTNode (IdentifierAST "c") (T.Location 0 8)
+              [ ASTNode (IdentifierAST "a") (T.Location 0 2),
+                ASTNode (IdentifierAST "b") (T.Location 0 5),
+                ASTNode (IdentifierAST "c") (T.Location 0 8)
               ]
-              (mkASTNode (IdentifierAST "d") (T.Location 0 11))
+              (ASTNode (IdentifierAST "d") (T.Location 0 11))
           )
           (T.Location 0 0)
       ]
@@ -373,18 +370,18 @@ equalityTestCases =
     ( "While expression",
       T.tokenize "while true do { a; b; }",
       let block =
-            mkASTNode
+            ASTNode
               ( Block
-                  [ mkASTNode (IdentifierAST "a") (T.Location 0 16),
-                    mkASTNode (IdentifierAST "b") (T.Location 0 19)
+                  [ ASTNode (IdentifierAST "a") (T.Location 0 16),
+                    ASTNode (IdentifierAST "b") (T.Location 0 19)
                   ]
-                  (mkASTNode Unit T.NoLocation)
+                  (ASTNode Unit T.NoLocation)
               )
               (T.Location 0 14)
        in [ ASTNode
               ( Apply
-                  (mkASTNode (IdentifierAST "while") (T.Location 0 0))
-                  [ mkASTNode (BooleanLiteral True) (T.Location 0 6),
+                  (ASTNode (IdentifierAST "while") (T.Location 0 0))
+                  [ ASTNode (BooleanLiteral True) (T.Location 0 6),
                     block
                   ]
               )
@@ -406,7 +403,7 @@ equalityTestCases =
       [ ASTNode
           ( Block
               []
-              ( mkASTNode
+              ( ASTNode
                   ( VarDecl
                       (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 5})
                       (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 9})
