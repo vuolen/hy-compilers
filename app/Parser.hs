@@ -29,7 +29,7 @@ data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 mkASTNode :: (AST, T.Location) -> ASTNode
 mkASTNode = uncurry ASTNode
 
-data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [AST] AST | VarDecl ASTNode ASTNode deriving (Eq, Show)
+data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [ASTNode] ASTNode | VarDecl ASTNode ASTNode deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast' = drawTree $ unfoldTree unfold' ast'
@@ -37,7 +37,7 @@ prettyPrint ast' = drawTree $ unfoldTree unfold' ast'
     unfold' :: AST -> (String, [AST])
     unfold' (Apply fn args) = ("Apply", ast fn : map ast args)
     unfold' (If cond thenBranch elseBranch) = ("If", [ast cond, ast thenBranch, ast elseBranch])
-    unfold' (Block exprs value) = ("Block", exprs ++ [value])
+    unfold' (Block exprs value) = ("Block", map ast exprs ++ [ast value])
     unfold' ast = (show ast, [])
 
 -- precedence for binary operations
@@ -272,15 +272,15 @@ block = do
     semicolon
     return expr
   value <- valueExpr <|> noValueExpr
-  return (Block (fmap fst exprs) value, loc)
+  return (Block (map mkASTNode exprs) value, loc)
   where
     valueExpr = do
-      (expr, _) <- variableDeclaration <|> parseExpr
+      expr <- mkASTNode <$> (variableDeclaration <|> parseExpr)
       satisfyToken (T.Punctuation "}")
       return expr
     noValueExpr = do
       satisfyToken (T.Punctuation "}")
-      return Unit
+      return $ mkASTNode (Unit, T.NoLocation)
 
 funCall = do
   id <- mkASTNode <$> identifier
@@ -296,6 +296,7 @@ funCall = do
       satisfyToken $ T.Punctuation ")"
       return args
 
+variableDeclaration :: Parser (AST, T.Location)
 variableDeclaration = do
   loc <- satisfyIdentifier "var"
   id <- identifier

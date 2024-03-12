@@ -327,13 +327,16 @@ equalityTestCases =
     ),
     ( "Empty block expression",
       T.tokenize "{}",
-      [(Block [] Unit, T.Location 0 0)]
+      [(Block [] (mkASTNode Unit T.NoLocation), T.Location 0 0)]
     ),
     ( "Block expression without result expression",
       T.tokenize "{ a; b; c; }",
       [ ( Block
-            [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"]
-            Unit,
+            [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
+              mkASTNode (IdentifierAST "b") (T.Location 0 5),
+              mkASTNode (IdentifierAST "c") (T.Location 0 8)
+            ]
+            (mkASTNode Unit T.NoLocation),
           T.Location 0 0
         )
       ]
@@ -341,15 +344,26 @@ equalityTestCases =
     ( "Block expression with result expression",
       T.tokenize "{ a; b; c; d }",
       [ ( Block
-            [IdentifierAST "a", IdentifierAST "b", IdentifierAST "c"]
-            (IdentifierAST "d"),
+            [ mkASTNode (IdentifierAST "a") (T.Location 0 2),
+              mkASTNode (IdentifierAST "b") (T.Location 0 5),
+              mkASTNode (IdentifierAST "c") (T.Location 0 8)
+            ]
+            (mkASTNode (IdentifierAST "d") (T.Location 0 11)),
           T.Location 0 0
         )
       ]
     ),
     ( "While expression",
       T.tokenize "while true do { a; b; }",
-      let block = mkASTNode (Block [IdentifierAST "a", IdentifierAST "b"] Unit) (T.Location 0 14)
+      let block =
+            mkASTNode
+              ( Block
+                  [ mkASTNode (IdentifierAST "a") (T.Location 0 16),
+                    mkASTNode (IdentifierAST "b") (T.Location 0 19)
+                  ]
+                  (mkASTNode Unit T.NoLocation)
+              )
+              (T.Location 0 14)
        in [ ( Apply
                 (mkASTNode (IdentifierAST "while") (T.Location 0 0))
                 [ mkASTNode (BooleanLiteral True) (T.Location 0 6),
@@ -372,9 +386,12 @@ equalityTestCases =
       T.tokenize "{var x = 123}",
       [ ( Block
             []
-            ( VarDecl
-                (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 5})
-                (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 9})
+            ( mkASTNode
+                ( VarDecl
+                    (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 5})
+                    (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 9})
+                )
+                (T.Location 0 1)
             ),
           T.Location 0 0
         )
@@ -421,14 +438,14 @@ unitTests =
             Right _ -> return (),
       testCase "Infer semicolon after block in block" $
         do
-          let expr1 = "{ { a } { b } }"
+          let expr1 = "{ { a }  { b } }"
           let expr2 = "{ { a }; { b } }"
           ast1 <- parseSuccess $ T.tokenize expr1
           ast2 <- parseSuccess $ T.tokenize expr2
           assertEqual "" ast1 ast2,
       testCase "Infer semicolon after block in if then" $
         do
-          let expr1 = "{if true then { a } b}"
+          let expr1 = "{if true then { a }  b}"
           let expr2 = "{if true then { a }; b}"
           ast1 <- parseSuccess $ T.tokenize expr1
           ast2 <- parseSuccess $ T.tokenize expr2
@@ -436,7 +453,7 @@ unitTests =
       testCase
         "Infer semicolon after block in if then else"
         $ do
-          let expr1 = "{ if true then { a } else { b } 3 }"
+          let expr1 = "{ if true then { a } else { b }  3 }"
           let expr2 = "{ if true then { a } else { b }; 3 }"
           ast1 <- parseSuccess $ T.tokenize expr1
           ast2 <- parseSuccess $ T.tokenize expr2
@@ -444,7 +461,7 @@ unitTests =
       testCase
         "Infer semicolon after block in while"
         $ do
-          let expr1 = "{ while true do { a } 3 }"
+          let expr1 = "{ while true do { a }  3 }"
           let expr2 = "{ while true do { a }; 3 }"
           ast1 <- parseSuccess $ T.tokenize expr1
           ast2 <- parseSuccess $ T.tokenize expr2
