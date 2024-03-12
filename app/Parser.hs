@@ -29,14 +29,14 @@ data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 mkASTNode :: (AST, T.Location) -> ASTNode
 mkASTNode = uncurry ASTNode
 
-data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If AST AST AST | Block [AST] AST | VarDecl ASTNode ASTNode deriving (Eq, Show)
+data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [AST] AST | VarDecl ASTNode ASTNode deriving (Eq, Show)
 
 prettyPrint :: AST -> String
 prettyPrint ast' = drawTree $ unfoldTree unfold' ast'
   where
     unfold' :: AST -> (String, [AST])
     unfold' (Apply fn args) = ("Apply", ast fn : map ast args)
-    unfold' (If cond thenBranch elseBranch) = ("If", [cond, thenBranch, elseBranch])
+    unfold' (If cond thenBranch elseBranch) = ("If", [ast cond, ast thenBranch, ast elseBranch])
     unfold' (Block exprs value) = ("Block", exprs ++ [value])
     unfold' ast = (show ast, [])
 
@@ -248,16 +248,15 @@ unaryOperator = not <|> negate
 
 ifExpr = do
   loc <- satisfyIdentifier "if"
-  (condExpr, _) <- parseExpr
+  condExpr <- mkASTNode <$> parseExpr
   satisfyIdentifier "then"
-  (thenExpr, _) <- parseExpr
-  elseBranch <- elseBranch <|> return Unit
+  thenExpr <- mkASTNode <$> parseExpr
+  elseBranch <- elseBranch <|> return (mkASTNode (Unit, T.NoLocation))
   return (If condExpr thenExpr elseBranch, loc)
   where
     elseBranch = do
       satisfyIdentifier "else"
-      (elseExpr, _) <- parseExpr
-      return elseExpr
+      mkASTNode <$> parseExpr
 
 while = do
   loc <- satisfyIdentifier "while"

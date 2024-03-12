@@ -226,9 +226,9 @@ equalityTestCases =
     ( "if then else",
       T.tokenize "if true then 1 else 2",
       [ ( If
-            (BooleanLiteral True)
-            (IntegerLiteral 1)
-            (IntegerLiteral 2),
+            (mkASTNode (BooleanLiteral True) (T.Location 0 3))
+            (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
+            (mkASTNode (IntegerLiteral 2) (T.Location 0 20)),
           T.Location 0 0
         )
       ]
@@ -236,9 +236,9 @@ equalityTestCases =
     ( "if then",
       T.tokenize "if true then 1",
       [ ( If
-            (BooleanLiteral True)
-            (IntegerLiteral 1)
-            Unit,
+            (mkASTNode (BooleanLiteral True) (T.Location 0 3))
+            (mkASTNode (IntegerLiteral 1) (T.Location 0 13))
+            (mkASTNode Unit T.NoLocation),
           T.Location 0 0
         )
       ]
