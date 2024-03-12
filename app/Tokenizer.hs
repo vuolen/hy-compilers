@@ -11,7 +11,7 @@ import Prelude
 
 type SourceCode = String
 
-data Location = Location Int Int deriving (Eq, Show)
+data Location = Location Int Int | NoLocation deriving (Eq, Show)
 
 data Source = IntLit String deriving (Eq, Show)
 

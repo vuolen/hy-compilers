@@ -1,12 +1,8 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Parser
   ( AST (..),
     ASTNode (..),
     ParserError (..),
     parse,
-    applyArgs,
-    applyTwo,
   )
 where
 
@@ -23,7 +19,7 @@ import Data.Maybe (isJust)
 import Data.Tree (drawTree, unfoldTree)
 import Debug.Trace (trace, traceM, traceWith)
 import Tokenizer qualified as T
-  ( Location,
+  ( Location (..),
     Token (Identifier, IntegerLiteral, Operator, Punctuation),
   )
 import Prelude
@@ -33,23 +29,16 @@ data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 mkASTNode :: (AST, T.Location) -> ASTNode
 mkASTNode = uncurry ASTNode
 
-data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply AST AST | If AST AST AST | Block [AST] AST | VarDecl ASTNode ASTNode deriving (Eq, Show)
+data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If AST AST AST | Block [AST] AST | VarDecl ASTNode ASTNode deriving (Eq, Show)
 
 prettyPrint :: AST -> String
-prettyPrint ast = drawTree $ unfoldTree unfold' ast
+prettyPrint ast' = drawTree $ unfoldTree unfold' ast'
   where
     unfold' :: AST -> (String, [AST])
-    unfold' (Apply fn arg) = ("Apply", [fn, arg])
+    unfold' (Apply fn args) = ("Apply", ast fn : map ast args)
     unfold' (If cond thenBranch elseBranch) = ("If", [cond, thenBranch, elseBranch])
     unfold' (Block exprs value) = ("Block", exprs ++ [value])
     unfold' ast = (show ast, [])
-
-applyArgs :: String -> [AST] -> AST
-applyArgs op [] = applyArgs op [Unit]
-applyArgs op args = foldl Apply (IdentifierAST op) args
-
-applyTwo :: String -> AST -> AST -> AST
-applyTwo op ast1 ast2 = applyArgs op [ast1, ast2]
 
 -- precedence for binary operations
 precedence :: String -> Int
@@ -131,6 +120,15 @@ many1 p = do
   xs <- many p
   return $ x : xs
 
+delimited :: Parser a1 -> Parser a2 -> Parser [a1]
+delimited p d = do
+  xs <- many $ do
+    x <- p
+    d
+    return x
+  last <- p
+  return $ xs ++ [last]
+
 optional :: Parser a -> Parser Bool
 optional p = (p >> return True) <|> return False
 
@@ -178,22 +176,22 @@ parseExpr = do
   nextToken <- peek
   case nextToken of
     Nothing -> throwMessage "unexpected end of input"
-    Just (_, loc) -> do
-      ast <- parseExpr' 0
-      return (ast, loc)
+    _ -> do
+      astnode <- parseExpr' 0
+      return (ast astnode, loc astnode)
   where
-    parseExpr' :: Int -> Parser AST
+    parseExpr' :: Int -> Parser ASTNode
     parseExpr' prec = do
-      (left, _) <- parseValue
+      left <- mkASTNode <$> parseValue
       let loop left = do
             nextToken <- peek
             case nextToken of
-              Just (T.Operator op, _) ->
+              Just (T.Operator op, opLoc) ->
                 if precedence op >= prec
                   then do
                     consume
                     right <- parseExpr' $ precedence op + 1
-                    loop $ applyArgs op [left, right]
+                    loop $ mkASTNode (Apply (mkASTNode (IdentifierAST op, opLoc)) [left, right], opLoc)
                   else return left
               _ -> return left
       loop left
@@ -222,7 +220,7 @@ integerLiteral = do
       _ -> False
 
 identifier = do
-  ((T.Identifier id), loc) <- satisfy isIdentifier
+  (T.Identifier id, loc) <- satisfy isIdentifier
   return (IdentifierAST id, loc)
   where
     isIdentifier token = case token of
@@ -241,12 +239,12 @@ unaryOperator = not <|> negate
   where
     not = do
       loc <- satisfyIdentifier "not"
-      (expr, _) <- parseExpr
-      return (applyArgs "not" [expr], loc)
+      expr <- mkASTNode <$> parseExpr
+      return (Apply (mkASTNode (IdentifierAST "not", loc)) [expr], loc)
     negate = do
       (_, loc) <- satisfyToken (T.Operator "-")
-      (expr, _) <- parseExpr
-      return (applyArgs "-" [expr], loc)
+      expr <- mkASTNode <$> parseExpr
+      return (Apply (mkASTNode (IdentifierAST "-", loc)) [expr], loc)
 
 ifExpr = do
   loc <- satisfyIdentifier "if"
@@ -263,10 +261,10 @@ ifExpr = do
 
 while = do
   loc <- satisfyIdentifier "while"
-  (cond, _) <- parseExpr
+  cond <- mkASTNode <$> parseExpr
   satisfyIdentifier "do"
-  (body, _) <- parseExpr
-  return (applyArgs "while" [cond, body], loc)
+  body <- mkASTNode <$> parseExpr
+  return (Apply (mkASTNode (IdentifierAST "while", loc)) [cond, body], loc)
 
 block = do
   (_, loc) <- satisfyToken (T.Punctuation "{")
@@ -286,15 +284,16 @@ block = do
       return Unit
 
 funCall = do
-  (IdentifierAST id, loc) <- identifier
+  id <- mkASTNode <$> identifier
   args <- argumentList
-  return (applyArgs id args, loc)
+  return $ mkASTNode (Apply id args, loc id)
   where
     argumentList = do
-      satisfyToken $ T.Punctuation "("
-      args <- many $ do
-        (expr, _) <- parseExpr
-        return expr
+      (_, loc) <- satisfyToken $ T.Punctuation "("
+      let comma = satisfyToken $ T.Punctuation ","
+      -- if the arg list fails, return Unit
+      args <-
+        map mkASTNode <$> delimited parseExpr comma <|> return [mkASTNode (Unit, loc)]
       satisfyToken $ T.Punctuation ")"
       return args
 
@@ -307,7 +306,8 @@ variableDeclaration = do
 
 parseValue :: Parser (AST, T.Location)
 parseValue = do
-  foldr (<|>) noMatch [funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, old]
+  let astNodeToTuple astnode = (ast astnode, loc astnode)
+  foldr (<|>) noMatch [astNodeToTuple <$> funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, identifier, old]
   where
     noMatch = do
       token <- peek
@@ -316,26 +316,6 @@ parseValue = do
     old = do
       (token, loc) <- consume
       case token of
-        T.Identifier id -> do
-          isArgumentList <- consumeIf $ T.Punctuation "("
-          if isArgumentList
-            then do
-              isEmptyArgumentList <- consumeIf $ T.Punctuation ")"
-              if isEmptyArgumentList
-                then return $ (applyArgs id [Unit], loc)
-                else do
-                  arglist <- loop []
-                  return (foldl Apply (IdentifierAST id) arglist, loc)
-            else
-              return (IdentifierAST id, loc)
-          where
-            loop args = do
-              (arg, argloc) <- parseExpr
-              nextToken <- consume
-              case nextToken of
-                (T.Punctuation ")", _) -> return $ args ++ [arg]
-                (T.Punctuation ",", _) -> loop (arg : args)
-                _ -> throwMessage $ "Unexpected token in argument list " ++ show nextToken ++ " " ++ show argloc
         T.Punctuation "(" -> do
           expr <- parseExpr
           consume
