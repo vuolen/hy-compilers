@@ -13,6 +13,7 @@ import Control.Monad.Except (ExceptT, MonadError, catchError, mapError, runExcep
 import Control.Monad.Identity
 import Control.Monad.Loops (untilM)
 import Control.Monad.State.Lazy (MonadState, StateT, evalStateT, get, gets, modify, put, runStateT)
+import Data.Either (isLeft)
 import Data.Int (Int64)
 import Data.List (uncons)
 import Data.Maybe (isJust)
@@ -48,6 +49,10 @@ precedence op
   | elem op ["+", "-"] = 6
   | elem op ["*", "/", "%"] = 7
   | otherwise = 8
+
+isLeftAssociative :: String -> Bool
+isLeftAssociative "=" = False
+isLeftAssociative _ = True
 
 data ParserState
   = ParserState
@@ -170,11 +175,7 @@ consumeIf token = do
 
 parseExpr :: Parser ASTNode
 parseExpr = do
-  nextToken <- peek
-  case nextToken of
-    Nothing -> throwMessage "unexpected end of input"
-    _ -> do
-      parseExpr' 0
+  parseExpr' 0
   where
     parseExpr' :: Int -> Parser ASTNode
     parseExpr' prec = do
@@ -186,11 +187,17 @@ parseExpr = do
                 if precedence op >= prec
                   then do
                     consume
-                    right <- parseExpr' $ precedence op + 1
-                    loop $ ASTNode (Apply (ASTNode (IdentifierAST op) opLoc) [left, right]) opLoc
-                  else return left
+                    let newPrecedence = if isLeftAssociative op then precedence op + 1 else precedence op
+                    right <- parseExpr' newPrecedence
+                    let newLeft = ASTNode (Apply (ASTNode (IdentifierAST op) opLoc) [left, right]) opLoc
+                    loop newLeft
+                  else do
+                    return left
               _ -> return left
       loop left
+    isOperator token = case token of
+      T.Operator _ -> True
+      _ -> False
 
 semicolon :: Parser ()
 semicolon = semicolon' <|> inferSemicolon

@@ -48,7 +48,7 @@ propertyTests =
       testProperty
         "Binary operations supported"
         $ do
-          op <- gen $ Gen.elem $ fromList ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or", "="]
+          op <- gen $ Gen.elem $ fromList ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "and", "or"]
           let tokens = T.tokenize $ "1 " ++ op ++ " 2"
           let expected =
                 [ ASTNode
@@ -412,6 +412,25 @@ equalityTestCases =
               )
           )
           (T.Location 0 0)
+      ]
+    ),
+    ( "Right-associative variable assignment",
+      T.tokenize "x = y = 123",
+      [ ASTNode
+          ( Apply
+              (ASTNode (IdentifierAST "=") (T.Location 0 2))
+              [ ASTNode (IdentifierAST "x") (T.Location 0 0),
+                ASTNode
+                  ( Apply
+                      (ASTNode (IdentifierAST "=") (T.Location 0 6))
+                      [ ASTNode (IdentifierAST "y") (T.Location 0 4),
+                        ASTNode (IntegerLiteral 123) (T.Location 0 8)
+                      ]
+                  )
+                  (T.Location 0 6)
+              ]
+          )
+          (T.Location 0 2)
       ]
     )
   ]
