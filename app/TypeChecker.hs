@@ -9,8 +9,8 @@ import Debug.Trace (trace, traceM)
 import EitherState (EitherState, runEitherState)
 import GHC.Generics (Constructor (conName))
 import GHC.Read (paren)
-import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (ASTNode), prettyPrint)
-import Parser qualified as P (AST (Unit))
+import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (ASTNode), prettyPrint)
+import Parser qualified as P (AST (..))
 import Tokenizer (Location (Location))
 
 data Type = Int | Bool | Unit | Fun [Type] Type
@@ -223,11 +223,63 @@ equalities ast = case ast of
               (Just ast)
   _ -> skipParser
 
+block :: ASTNode -> TypeChecker Type
+block ast = case ast of
+  ASTNode (Block exprs value) _ -> do
+    mapM_ typeChecker exprs
+    typeChecker value
+  _ -> skipParser
+
+ifThenElse :: ASTNode -> TypeChecker Type
+ifThenElse ast = case ast of
+  ASTNode (If cond thenBranch elseBranch) _ -> do
+    condType <- typeChecker cond
+    thenType <- typeChecker thenBranch
+    elseType <- typeChecker elseBranch
+
+    if condType /= Bool
+      then
+        throwTypeError
+          ( "Expected if condition to be Bool, got "
+              ++ show condType
+          )
+          (Just ast)
+      else
+        if elseType == Unit
+          then return Unit
+          else
+            if thenType /= elseType
+              then
+                throwTypeError
+                  ( "Expected both if branches to be of the same type, got "
+                      ++ show thenType
+                      ++ " and "
+                      ++ show elseType
+                  )
+                  (Just ast)
+              else
+                return elseType
+  _ -> skipParser
+
 typeChecker :: ASTNode -> TypeChecker Type
 typeChecker ast = foldr (<|>) noMatch typeCheckers
   where
     noMatch = throwTypeError "No type could be determined for" (Just ast)
-    typeCheckers = map (\checker -> checker ast) [integerLiteral, booleanLiteral, unitLiteral, varDecl, typedVarDecl, varAssignment, unaryNegation, equalities, apply]
+    typeCheckers =
+      map
+        (\checker -> checker ast)
+        [ integerLiteral,
+          booleanLiteral,
+          unitLiteral,
+          varDecl,
+          typedVarDecl,
+          varAssignment,
+          unaryNegation,
+          equalities,
+          block,
+          ifThenElse,
+          apply
+        ]
 
 typeCheck :: SymTab Type -> ASTNode -> Either TypeError (Type, SymTab Type)
 typeCheck symTab astNode = case result of
@@ -235,3 +287,6 @@ typeCheck symTab astNode = case result of
   Left e -> Left e
   where
     (result, state) = runEitherState (typeChecker astNode) symTab
+
+typeCheckBase :: ASTNode -> Either TypeError (Type, SymTab Type)
+typeCheckBase astNode = typeCheck baseSymTab astNode

@@ -3,7 +3,7 @@ module TestTypeChecker (typeCheckerTests) where
 import Control.Applicative (Alternative (empty))
 import Data.Either (isLeft)
 import Data.List.NonEmpty (fromList)
-import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (..), parse)
+import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (..), parse)
 import Parser qualified as P (AST (Unit))
 import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Predicate as P
@@ -132,6 +132,53 @@ equalityTestCases =
         )
         (T.Location 0 0),
       (Unit, SymTab {parent = Just baseSymTab, symbols = [("x", Int)]})
+    ),
+    ( "Block without result expression",
+      emptySymTab,
+      ASTNode
+        ( Block
+            [ ASTNode (IntegerLiteral 1) (T.Location 0 2),
+              ASTNode (IntegerLiteral 2) (T.Location 0 5),
+              ASTNode (IntegerLiteral 3) (T.Location 0 8)
+            ]
+            (ASTNode P.Unit T.NoLocation)
+        )
+        (T.Location 0 0),
+      (Unit, emptySymTab)
+    ),
+    ( "Block with result expression",
+      emptySymTab,
+      ASTNode
+        ( Block
+            [ ASTNode (IntegerLiteral 1) (T.Location 0 2),
+              ASTNode (IntegerLiteral 2) (T.Location 0 5)
+            ]
+            (ASTNode (IntegerLiteral 3) (T.Location 0 8))
+        )
+        (T.Location 0 0),
+      (Int, emptySymTab)
+    ),
+    ( "if then expression",
+      emptySymTab,
+      ASTNode
+        ( If
+            (ASTNode (BooleanLiteral True) (T.Location 0 0))
+            (ASTNode (IntegerLiteral 1) (T.Location 0 0))
+            (ASTNode P.Unit T.NoLocation)
+        )
+        (T.Location 0 0),
+      (Unit, emptySymTab)
+    ),
+    ( "if then else expression",
+      emptySymTab,
+      ASTNode
+        ( If
+            (ASTNode (BooleanLiteral True) (T.Location 0 0))
+            (ASTNode (IntegerLiteral 1) (T.Location 0 0))
+            (ASTNode (IntegerLiteral 1) (T.Location 0 0))
+        )
+        (T.Location 0 0),
+      (Int, emptySymTab)
     )
   ]
     ++ map
@@ -200,6 +247,16 @@ failureTestCases =
       ASTNode
         ( VarDecl
             (ASTNode (IdentifierAST "x") (T.Location 0 0))
+            (ASTNode (IntegerLiteral 1) (T.Location 0 0))
+        )
+        (T.Location 0 0)
+    ),
+    ( "If then else mismatch",
+      emptySymTab,
+      ASTNode
+        ( If
+            (ASTNode (BooleanLiteral True) (T.Location 0 0))
+            (ASTNode (BooleanLiteral False) (T.Location 0 0))
             (ASTNode (IntegerLiteral 1) (T.Location 0 0))
         )
         (T.Location 0 0)
