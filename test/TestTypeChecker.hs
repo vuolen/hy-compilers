@@ -3,7 +3,7 @@ module TestTypeChecker (typeCheckerTests) where
 import Control.Applicative (Alternative (empty))
 import Data.Either (isLeft)
 import Data.List.NonEmpty (fromList)
-import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral, VarDecl), ASTNode (..), parse)
+import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (..), parse)
 import Parser qualified as P (AST (Unit))
 import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Predicate as P
@@ -71,6 +71,67 @@ equalityTestCases =
         )
         (T.Location 0 0),
       (Bool, emptySymTab)
+    ),
+    ( "Equality",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "==") (T.Location 0 0))
+            [ASTNode (IntegerLiteral 1) (T.Location 0 0), ASTNode (IntegerLiteral 1) (T.Location 0 0)]
+        )
+        (T.Location 0 0),
+      (Bool, emptySymTab)
+    ),
+    ( "Inequality",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "!=") (T.Location 0 0))
+            [ASTNode (IntegerLiteral 1) (T.Location 0 0), ASTNode (IntegerLiteral 1) (T.Location 0 0)]
+        )
+        (T.Location 0 0),
+      (Bool, emptySymTab)
+    ),
+    ( "print_int",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "print_int") (T.Location 0 0))
+            [ASTNode (IntegerLiteral 1) (T.Location 0 0)]
+        )
+        (T.Location 0 0),
+      (Unit, emptySymTab)
+    ),
+    ( "print_bool",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "print_bool") (T.Location 0 0))
+            [ASTNode (BooleanLiteral True) (T.Location 0 0)]
+        )
+        (T.Location 0 0),
+      (Unit, emptySymTab)
+    ),
+    ( "read_int",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "read_int") (T.Location 0 0))
+            []
+        )
+        (T.Location 0 0),
+      (Int, emptySymTab)
+    ),
+    ( "Typed variable declaration",
+      emptySymTab,
+      ASTNode
+        ( TypedVarDecl
+            (ASTNode (IdentifierAST "x") (T.Location 0 0))
+            (ASTNode (IdentifierAST "Int") (T.Location 0 0))
+            (ASTNode (IntegerLiteral 1) (T.Location 0 0))
+        )
+        (T.Location 0 0),
+      (Unit, SymTab {parent = Just baseSymTab, symbols = [("x", Int)]})
     )
   ]
     ++ map
@@ -115,6 +176,28 @@ failureTestCases =
             [ASTNode (IntegerLiteral 1) (T.Location 0 0)]
         )
         (T.Location 0 0)
+    ),
+    ( "Equality type mismatch",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "==") (T.Location 0 0))
+            [ASTNode (IntegerLiteral 1) (T.Location 0 0), ASTNode (BooleanLiteral True) (T.Location 0 0)]
+        )
+        (T.Location 0 0)
+    ),
+    ( "Inequality type mismatch",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "!=") (T.Location 0 0))
+            [ASTNode (IntegerLiteral 1) (T.Location 0 0), ASTNode (BooleanLiteral True) (T.Location 0 0)]
+        )
+        (T.Location 0 0)
+    ),
+    ( "Redeclaring variable",
+      SymTab {parent = Nothing, symbols = [("x", Int)]},
+      xIsOneAST
     )
   ]
 

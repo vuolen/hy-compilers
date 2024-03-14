@@ -8,7 +8,7 @@ import Data.Map (argSet)
 import EitherState (EitherState, runEitherState)
 import GHC.Generics (Constructor (conName))
 import GHC.Read (paren)
-import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral, VarDecl), ASTNode (ASTNode), prettyPrint)
+import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (ASTNode), prettyPrint)
 import Parser qualified as P (AST (Unit))
 import Tokenizer (Location (Location))
 
@@ -49,7 +49,10 @@ baseSymTab =
           (">", Fun [Bool, Bool] Bool),
           (">=", Fun [Bool, Bool] Bool),
           ("and", Fun [Bool, Bool] Bool),
-          ("or", Fun [Bool, Bool] Bool)
+          ("or", Fun [Bool, Bool] Bool),
+          ("print_int", Fun [Int] Unit),
+          ("print_bool", Fun [Bool] Unit),
+          ("read_int", Fun [] Int)
         ]
     }
 
@@ -92,6 +95,15 @@ getVar name = do
 addVar :: String -> Type -> TypeChecker ()
 addVar name value = modify $ \symTab -> symTab {symbols = (name, value) : symbols symTab}
 
+declareVariable :: String -> Type -> TypeChecker ()
+declareVariable name value = do
+  symTab <- get
+  let localVariables = map fst (symbols symTab)
+  if name `elem` localVariables
+    then throwTypeError ("Variable " ++ name ++ " already declared") Nothing
+    else do
+      addVar name value
+
 integerLiteral :: ASTNode -> TypeChecker Type
 integerLiteral ast = case ast of
   ASTNode (IntegerLiteral _) _ -> return Int
@@ -110,8 +122,25 @@ unitLiteral ast = case ast of
 varDecl :: ASTNode -> TypeChecker Type
 varDecl ast = case ast of
   ASTNode (VarDecl (ASTNode (IdentifierAST name) _) value) _ -> do
-    addVar name Int
+    valueType <- typeChecker value
+    declareVariable name valueType
     return Unit
+  _ -> skipParser
+
+typedVarDecl :: ASTNode -> TypeChecker Type
+typedVarDecl ast = case ast of
+  ASTNode (TypedVarDecl (ASTNode (IdentifierAST name) _) (ASTNode (IdentifierAST typeName) _) value) _ -> do
+    valueType <- typeChecker value
+    expectedType <- case typeName of
+      "Int" -> return Int
+      "Bool" -> return Bool
+      "Unit" -> return Unit
+      _ -> throwTypeError ("Invalid type in variable declaration " ++ typeName) (Just ast)
+    if valueType /= expectedType
+      then throwTypeError ("Declaring variable " ++ name ++ " expected a value of type " ++ show expectedType ++ " but got " ++ show valueType) (Just ast)
+      else do
+        declareVariable name valueType
+        return Unit
   _ -> skipParser
 
 unaryNegation :: ASTNode -> TypeChecker Type
@@ -151,15 +180,46 @@ varAssignment ast = case ast of
     valueType <- typeChecker value
     varType <- getVar name
     if valueType == varType
-      then return Unit
-      else throwTypeError ("Type mismatch in variable assignment: " ++ name) (Just ast)
+      then do
+        addVar name valueType
+        return Unit
+      else
+        throwTypeError
+          ( "Cannot assign a value of type "
+              ++ show valueType
+              ++ " to variable "
+              ++ name
+              ++ " of type "
+              ++ show varType
+          )
+          (Just ast)
+  _ -> skipParser
+
+equalities :: ASTNode -> TypeChecker Type
+equalities ast = case ast of
+  ASTNode (Apply (ASTNode (IdentifierAST op) _) [arg1, arg2]) _ -> do
+    if op /= "==" && op /= "!="
+      then skipParser
+      else do
+        arg1Type <- typeChecker arg1
+        arg2Type <- typeChecker arg2
+        if arg1Type == arg2Type
+          then return Bool
+          else
+            throwTypeError
+              ( "Cannot compare equality between values of type "
+                  ++ show arg1Type
+                  ++ " and "
+                  ++ show arg2Type
+              )
+              (Just ast)
   _ -> skipParser
 
 typeChecker :: ASTNode -> TypeChecker Type
 typeChecker ast = foldr (<|>) noMatch typeCheckers
   where
     noMatch = throwTypeError "No type could be determined for" (Just ast)
-    typeCheckers = map (\checker -> checker ast) [integerLiteral, booleanLiteral, unitLiteral, varDecl, varAssignment, unaryNegation, apply]
+    typeCheckers = map (\checker -> checker ast) [integerLiteral, booleanLiteral, unitLiteral, varDecl, typedVarDecl, varAssignment, unaryNegation, equalities, apply]
 
 typeCheck :: SymTab Type -> ASTNode -> Either TypeError (Type, SymTab Type)
 typeCheck symTab astNode = case result of

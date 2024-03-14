@@ -432,6 +432,17 @@ equalityTestCases =
           )
           (T.Location 0 2)
       ]
+    ),
+    ( "Typed variable assignment",
+      T.tokenize "var x: Int = 123",
+      [ ASTNode
+          ( TypedVarDecl
+              (ASTNode {ast = IdentifierAST "x", loc = T.Location 0 4})
+              (ASTNode {ast = IdentifierAST "Int", loc = T.Location 0 7})
+              (ASTNode {ast = IntegerLiteral 123, loc = T.Location 0 13})
+          )
+          (T.Location 0 0)
+      ]
     )
   ]
 

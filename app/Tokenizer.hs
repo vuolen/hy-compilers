@@ -30,7 +30,7 @@ identifierRegex = "^([a-zA-Z_][a-zA-Z_0-9]*)"
 
 operatorRegex = "^(\\+|-|\\*|\\/|==|!=|<=|>=|=|<|>|%|and\\b|or\\b)"
 
-punctuationRegex = "^(\\(|\\)|\\{|\\}|;|,)"
+punctuationRegex = "^(\\(|\\)|\\{|\\}|;|,|:)"
 
 commentRegex = "^((?:\\/\\/|#).*?)(?:\n|$)"
 

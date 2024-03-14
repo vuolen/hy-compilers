@@ -29,7 +29,7 @@ import Prelude
 
 data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 
-data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [ASTNode] ASTNode | VarDecl ASTNode ASTNode deriving (Eq, Show)
+data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [ASTNode] ASTNode | VarDecl ASTNode ASTNode | TypedVarDecl ASTNode ASTNode ASTNode deriving (Eq, Show)
 
 prettyPrint :: ASTNode -> String
 prettyPrint astnode = drawTree $ unfoldTree unfold' (ast astnode)
@@ -317,12 +317,23 @@ funCall = do
       return args
 
 variableDeclaration :: Parser ASTNode
-variableDeclaration = do
-  loc <- satisfyIdentifier "var"
-  id <- identifier
-  satisfyToken (T.Operator "=")
-  expr <- parseExpr
-  return $ ASTNode (VarDecl id expr) loc
+variableDeclaration = typed <|> untyped
+  where
+    typed = do
+      loc <- satisfyIdentifier "var"
+      id <- identifier
+      satisfyToken (T.Punctuation ":")
+      let invalidType = throwMessage "Invalid type in declaration"
+      t <- foldr (<|>) invalidType $ map matchIdentifier ["Int", "Bool", "Unit"]
+      satisfyToken (T.Operator "=")
+      expr <- parseExpr
+      return $ ASTNode (TypedVarDecl id t expr) loc
+    untyped = do
+      loc <- satisfyIdentifier "var"
+      id <- identifier
+      satisfyToken (T.Operator "=")
+      expr <- parseExpr
+      return $ ASTNode (VarDecl id expr) loc
 
 parseValue :: Parser ASTNode
 parseValue = do
