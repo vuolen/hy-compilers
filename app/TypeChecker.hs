@@ -2,6 +2,7 @@ module TypeChecker where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception ()
+import Control.Monad (foldM)
 import Control.Monad.Except (MonadError (catchError), throwError)
 import Control.Monad.State (MonadState (put), get, modify)
 import Data.Map (argSet)
@@ -99,6 +100,11 @@ integerLiteral ast = case ast of
 booleanLiteral :: ASTNode -> TypeChecker Type
 booleanLiteral ast = case ast of
   ASTNode (BooleanLiteral _) _ -> return Bool
+  _ -> skipParser
+
+variable :: ASTNode -> TypeChecker Type
+variable ast = case ast of
+  ASTNode (IdentifierAST name) _ -> getVar name
   _ -> skipParser
 
 unitLiteral :: ASTNode -> TypeChecker Type
@@ -260,6 +266,7 @@ typeChecker ast = foldr (<|>) noMatch typeCheckers
         (\checker -> checker ast)
         [ integerLiteral,
           booleanLiteral,
+          variable,
           unitLiteral,
           varDecl,
           typedVarDecl,
@@ -281,3 +288,10 @@ typeCheck symTab astNode = case result of
 
 typeCheckBase :: ASTNode -> Either TypeError (Type, SymTab Type)
 typeCheckBase astNode = typeCheck baseSymTab astNode
+
+typeCheckASTStream :: [ASTNode] -> Either TypeError (Type, SymTab Type)
+typeCheckASTStream astStream = do
+  let (result, state) = runEitherState (foldM (\_ ast -> typeChecker ast) Unit astStream) baseSymTab
+  case result of
+    Right t -> Right (t, state)
+    Left e -> Left e

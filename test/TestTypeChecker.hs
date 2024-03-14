@@ -192,6 +192,13 @@ equalityTestCases =
         )
         (T.Location 0 0),
       (Unit, emptySymTab)
+    ),
+    ( "variables",
+      SymTab {parent = Nothing, symbols = [("x", Int)]},
+      ASTNode
+        (IdentifierAST "x")
+        (T.Location 0 0),
+      (Int, SymTab {parent = Nothing, symbols = [("x", Int)]})
     )
   ]
     ++ map
