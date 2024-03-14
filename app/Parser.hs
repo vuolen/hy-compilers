@@ -29,7 +29,17 @@ import Prelude
 
 data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 
-data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [ASTNode] ASTNode | VarDecl ASTNode ASTNode | TypedVarDecl ASTNode ASTNode ASTNode deriving (Eq, Show)
+data AST
+  = IntegerLiteral Int64
+  | BooleanLiteral Bool
+  | Unit
+  | IdentifierAST String
+  | Apply ASTNode [ASTNode]
+  | If ASTNode ASTNode ASTNode
+  | Block [ASTNode] ASTNode
+  | VarDecl ASTNode ASTNode
+  | TypedVarDecl ASTNode ASTNode ASTNode
+  deriving (Eq, Show)
 
 prettyPrint :: ASTNode -> String
 prettyPrint astnode = drawTree $ unfoldTree unfold' (ast astnode)

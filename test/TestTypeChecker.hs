@@ -5,13 +5,14 @@ import Data.Either (isLeft)
 import Data.List.NonEmpty (fromList)
 import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (..), parse)
 import Parser qualified as P (AST (Unit))
+import SymTab (SymTab (..))
 import Test.Falsify.Generator qualified as Gen
 import Test.Falsify.Predicate as P
 import Test.Tasty (testGroup)
 import Test.Tasty.Falsify
 import Test.Tasty.HUnit (assertEqual, assertFailure, testCase)
 import Tokenizer qualified as T
-import TypeChecker (SymTab (..), Type (..), TypeError (..), baseSymTab, message, typeCheck)
+import TypeChecker (Type (..), TypeError (..), baseSymTab, message, typeCheck)
 
 typeCheckerTests = testGroup "typeChecker" [propertyTests, equalityUnitTests, failureUnitTests]
 
@@ -179,6 +180,18 @@ equalityTestCases =
         )
         (T.Location 0 0),
       (Int, emptySymTab)
+    ),
+    ( "while loop",
+      emptySymTab,
+      ASTNode
+        ( Apply
+            (ASTNode (IdentifierAST "while") (T.Location 0 0))
+            [ ASTNode (BooleanLiteral True) (T.Location 0 0),
+              ASTNode (IntegerLiteral 1) (T.Location 0 0)
+            ]
+        )
+        (T.Location 0 0),
+      (Unit, emptySymTab)
     )
   ]
     ++ map

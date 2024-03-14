@@ -11,6 +11,7 @@ import GHC.Generics (Constructor (conName))
 import GHC.Read (paren)
 import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (ASTNode), prettyPrint)
 import Parser qualified as P (AST (..))
+import SymTab (SymTab (SymTab, parent, symbols), insert, lookup)
 import Tokenizer (Location (Location))
 
 data Type = Int | Bool | Unit | Fun [Type] Type
@@ -27,12 +28,6 @@ data TypeError
 instance Show TypeError where
   show (TypeError {message, astNode}) = "TypeError \n message: " ++ message ++ " \n ast: " ++ maybe "Nothing" prettyPrint astNode
   show Skip = "Skip"
-
-data SymTab a = SymTab
-  { parent :: Maybe (SymTab a),
-    symbols :: [(String, a)]
-  }
-  deriving (Show, Eq)
 
 baseSymTab :: SymTab Type
 baseSymTab =
@@ -82,35 +77,19 @@ skipParser = throwError Skip
 getVar :: String -> TypeChecker Type
 getVar name = do
   symTab <- get
-  case lookup name (symbols symTab) of
+  case SymTab.lookup name symTab of
     Just t -> return t
-    Nothing -> do
-      case parent symTab of
-        Just parentSymTab -> do
-          put parentSymTab
-          t <- getVar name
-          put symTab
-          return t
-        Nothing -> throwTypeError ("Variable " ++ name ++ " not found") Nothing
+    Nothing -> throwTypeError ("Variable " ++ name ++ " not found") Nothing
 
 addVar :: String -> Type -> TypeChecker ()
-addVar name value = modify $ \symTab -> symTab {symbols = newSymbols name value (symbols symTab)}
-  where
-    newSymbols :: String -> Type -> [(String, Type)] -> [(String, Type)]
-    newSymbols name value [] = [(name, value)]
-    newSymbols name value ((n, v) : xs) =
-      if name == n
-        then (name, value) : xs
-        else (n, v) : newSymbols name value xs
+addVar name value = modify $ \symTab -> insert name value symTab
 
 declareVariable :: String -> Type -> TypeChecker ()
 declareVariable name value = do
   symTab <- get
-  let localVariables = map fst (symbols symTab)
-  if name `elem` localVariables
-    then throwTypeError ("Variable " ++ name ++ " already declared") Nothing
-    else do
-      addVar name value
+  case SymTab.lookup name symTab of
+    Just _ -> throwTypeError ("Variable " ++ name ++ " already declared") Nothing
+    Nothing -> addVar name value
 
 integerLiteral :: ASTNode -> TypeChecker Type
 integerLiteral ast = case ast of
@@ -261,6 +240,17 @@ ifThenElse ast = case ast of
                 return elseType
   _ -> skipParser
 
+while :: ASTNode -> TypeChecker Type
+while ast = case ast of
+  ASTNode (Apply (ASTNode (IdentifierAST "while") _) [cond, body]) _ -> do
+    condType <- typeChecker cond
+    if condType /= Bool
+      then
+        throwTypeError ("Expected while condition to be Bool, got " ++ show condType) (Just ast)
+      else
+        return Unit
+  _ -> skipParser
+
 typeChecker :: ASTNode -> TypeChecker Type
 typeChecker ast = foldr (<|>) noMatch typeCheckers
   where
@@ -278,6 +268,7 @@ typeChecker ast = foldr (<|>) noMatch typeCheckers
           equalities,
           block,
           ifThenElse,
+          while,
           apply
         ]
 
