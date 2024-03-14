@@ -225,6 +225,7 @@ semicolon = semicolon' <|> inferSemicolon
         ((T.Punctuation "}", _), Just (T.Punctuation "}", loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
         ((T.Punctuation "}", _), _) -> return ()
         (_, Just (_, loc)) -> throwMessage $ "Expected semicolon before " ++ show loc
+        (_, Nothing) -> return ()
 
 integerLiteral :: Parser ASTNode
 integerLiteral = do
@@ -347,7 +348,6 @@ variableDeclaration = typed <|> untyped
 
 parseValue :: Parser ASTNode
 parseValue = do
-  let astNodeToTuple astnode = (ast astnode, loc astnode)
   foldr (<|>) noMatch [funCall, block, while, ifExpr, unaryOperator, integerLiteral, boolean, unit, identifier, old]
   where
     noMatch = do
@@ -370,11 +370,12 @@ parseExpressionList stopCondition = parseExpressionList' []
     parseExpressionList' :: ASTStream -> Parser ASTStream
     parseExpressionList' exprs = do
       expr <- variableDeclaration <|> parseExpr
+      semicolon
       stop <- stopCondition
       if stop
-        then return $ exprs ++ [expr]
+        then do
+          return $ exprs ++ [expr]
         else do
-          semicolon
           parseExpressionList' (exprs ++ [expr])
 
 runParser :: Parser a -> [(T.Token, T.Location)] -> Either ParserError a
