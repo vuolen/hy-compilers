@@ -5,6 +5,7 @@ import Control.Exception ()
 import Control.Monad.Except (MonadError (catchError), throwError)
 import Control.Monad.State (MonadState (put), get, modify)
 import Data.Map (argSet)
+import Debug.Trace (trace, traceM)
 import EitherState (EitherState, runEitherState)
 import GHC.Generics (Constructor (conName))
 import GHC.Read (paren)
@@ -93,7 +94,14 @@ getVar name = do
         Nothing -> throwTypeError ("Variable " ++ name ++ " not found") Nothing
 
 addVar :: String -> Type -> TypeChecker ()
-addVar name value = modify $ \symTab -> symTab {symbols = (name, value) : symbols symTab}
+addVar name value = modify $ \symTab -> symTab {symbols = newSymbols name value (symbols symTab)}
+  where
+    newSymbols :: String -> Type -> [(String, Type)] -> [(String, Type)]
+    newSymbols name value [] = [(name, value)]
+    newSymbols name value ((n, v) : xs) =
+      if name == n
+        then (name, value) : xs
+        else (n, v) : newSymbols name value xs
 
 declareVariable :: String -> Type -> TypeChecker ()
 declareVariable name value = do

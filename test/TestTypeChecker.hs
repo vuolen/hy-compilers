@@ -197,7 +197,12 @@ failureTestCases =
     ),
     ( "Redeclaring variable",
       SymTab {parent = Nothing, symbols = [("x", Int)]},
-      xIsOneAST
+      ASTNode
+        ( VarDecl
+            (ASTNode (IdentifierAST "x") (T.Location 0 0))
+            (ASTNode (IntegerLiteral 1) (T.Location 0 0))
+        )
+        (T.Location 0 0)
     )
   ]
 
