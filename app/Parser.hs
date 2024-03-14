@@ -3,6 +3,7 @@ module Parser
     ASTNode (..),
     ParserError (..),
     parse,
+    prettyPrint,
   )
 where
 
@@ -19,6 +20,7 @@ import Data.List (uncons)
 import Data.Maybe (isJust)
 import Data.Tree (drawTree, unfoldTree)
 import Debug.Trace (trace, traceM, traceWith)
+import EitherState (EitherState, runEitherState)
 import Tokenizer qualified as T
   ( Location (..),
     Token (Identifier, IntegerLiteral, Operator, Punctuation),
@@ -29,8 +31,8 @@ data ASTNode = ASTNode {ast :: AST, loc :: T.Location} deriving (Eq, Show)
 
 data AST = IntegerLiteral Int64 | BooleanLiteral Bool | Unit | IdentifierAST String | Apply ASTNode [ASTNode] | If ASTNode ASTNode ASTNode | Block [ASTNode] ASTNode | VarDecl ASTNode ASTNode deriving (Eq, Show)
 
-prettyPrint :: AST -> String
-prettyPrint ast' = drawTree $ unfoldTree unfold' ast'
+prettyPrint :: ASTNode -> String
+prettyPrint astnode = drawTree $ unfoldTree unfold' (ast astnode)
   where
     unfold' :: AST -> (String, [AST])
     unfold' (Apply fn args) = ("Apply", ast fn : map ast args)
@@ -62,9 +64,9 @@ data ParserState
   deriving
     (Eq, Show)
 
-type ASTStream = [ASTNode]
-
 data ParserError = ParserError {message :: String}
+
+type ASTStream = [ASTNode]
 
 instance Show ParserError where
   show (ParserError {message}) =
@@ -76,14 +78,14 @@ instance Show ParserError where
 throwMessage :: forall a. String -> Parser a
 throwMessage message = throwError $ ParserError message
 
-newtype Parser a = Parser (ExceptT ParserError (StateT ParserState Identity) a) deriving (Functor, Applicative, Monad, MonadError ParserError, MonadState ParserState)
+type Parser a = EitherState ParserError ParserState a
 
-instance MonadFail Parser where
+instance MonadFail (EitherState ParserError ParserState) where
   fail _ = throwMessage "Failed to match pattern"
 
 -- yes im rolling out my own parser combinators, what are you going to do about it
 
-instance Alternative Parser where
+instance Alternative (EitherState ParserError ParserState) where
   empty = throwMessage "Empty parser"
   p1 <|> p2 = do
     oldState <- get
@@ -354,8 +356,10 @@ parseExpressionList stopCondition = parseExpressionList' []
           semicolon
           parseExpressionList' (exprs ++ [expr])
 
-runParser :: forall a. Parser a -> [(T.Token, T.Location)] -> Either ParserError a
-runParser (Parser parser) tokens = runIdentity $ evalStateT (runExceptT parser) (ParserState {tokens = tokens, consumed = 0})
+runParser :: Parser a -> [(T.Token, T.Location)] -> Either ParserError a
+runParser parser tokens = result
+  where
+    (result, _) = runEitherState parser (ParserState {tokens = tokens, consumed = 0})
 
 parse :: [(T.Token, T.Location)] -> Either ParserError ASTStream
 parse tokens = runParser (parseExpressionList isEmpty) tokens
