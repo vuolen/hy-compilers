@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import sys
+import re
 files = [f for f in os.listdir('test_programs')]
 
 if len(sys.argv) > 1 and sys.argv[1] == "local":
@@ -14,7 +15,7 @@ for f in files:
     with open(f'test_programs/{f}', 'r') as file:
         print(f'Running test file {f}')
         test_file = file.read()
-        tests = filter(lambda x: x != '', test_file.split('---'))
+        tests = filter(lambda x: x != '', re.split('^---$', test_file, flags=re.MULTILINE))
         for test in tests:
             input_file = str(tempfile.NamedTemporaryFile(mode='w', delete=True).name)
             output_file = str(tempfile.NamedTemporaryFile(mode='w', delete=True).name)
