@@ -2,16 +2,16 @@
 {
     var x = 1;
     var y = 1;
-    while x < 10 do {
-        x = x + 1;
-        y = if x then {
-            x = x + 1;
-            x
-        } else {
-            y
-        };  # <-- (this semicolon will become optional later)
-        x;
+    while false do {
     };  # <------ (this too)
+    x = x + 1;
+    y = if true then {
+        x = x + 1;
+        x
+    } else {
+        y
+    };  # <-- (this semicolon will become optional later)
+    x;
     123
 }
 

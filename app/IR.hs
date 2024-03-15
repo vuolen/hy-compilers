@@ -216,6 +216,52 @@ while ast = case ast of
     return "unit"
   _ -> skipIRGen
 
+and :: ASTNode -> IRGen IRVar
+and ast = case ast of
+  (ASTNode (Apply (ASTNode (IdentifierAST "and") _) [a, b]) loc) -> do
+    right <- newLabel
+    skip <- newLabel
+    end <- newLabel
+    resultVar <- newVar
+    leftVar <- irGenerator a
+    addInstruction (CondJump leftVar right skip, loc)
+
+    addInstruction (Label right, loc)
+    rightVar <- irGenerator b
+    addInstruction (Copy rightVar resultVar, loc)
+    addInstruction (Jump end, loc)
+
+    addInstruction (Label skip, loc)
+    addInstruction (LoadBoolConst False resultVar, loc)
+
+    addInstruction (Label end, loc)
+
+    return resultVar
+  _ -> skipIRGen
+
+or :: ASTNode -> IRGen IRVar
+or ast = case ast of
+  (ASTNode (Apply (ASTNode (IdentifierAST "or") _) [a, b]) loc) -> do
+    right <- newLabel
+    skip <- newLabel
+    end <- newLabel
+    resultVar <- newVar
+    leftVar <- irGenerator a
+    addInstruction (CondJump leftVar skip right, loc)
+
+    addInstruction (Label right, loc)
+    rightVar <- irGenerator b
+    addInstruction (Copy rightVar resultVar, loc)
+    addInstruction (Jump end, loc)
+
+    addInstruction (Label skip, loc)
+    addInstruction (LoadBoolConst True resultVar, loc)
+
+    addInstruction (Label end, loc)
+
+    return resultVar
+  _ -> skipIRGen
+
 varAssignment :: ASTNode -> EitherState IRError IRGenState IRVar
 varAssignment ast = case ast of
   (ASTNode (Apply (ASTNode (IdentifierAST "=") _) [ASTNode (IdentifierAST varName) _, value]) loc) -> do
@@ -233,7 +279,7 @@ irGenerator ast = do
     generators =
       map
         (\generator -> generator ast)
-        [integerLiteral, booleanLiteral, unitLiteral, identifier, while, varAssignment, apply, ifElseThen, block, varDecl, typedVarDecl]
+        [integerLiteral, booleanLiteral, unitLiteral, identifier, while, varAssignment, IR.and, IR.or, apply, ifElseThen, block, varDecl, typedVarDecl]
 
 generateIR :: ASTNode -> [(Instruction, Location)]
 generateIR astNode = case result of

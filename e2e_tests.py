@@ -19,7 +19,6 @@ for f in files:
         for test in tests:
             input_file = str(tempfile.NamedTemporaryFile(mode='w', delete=True).name)
             output_file = str(tempfile.NamedTemporaryFile(mode='w', delete=True).name)
-
             test_source = test.split('out:\n')[0]
             expected = test.split('out:\n')[1]
 

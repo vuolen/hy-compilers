@@ -48,6 +48,40 @@ genAssembly' ins vars = case ins of
       "addq " ++ getRef b ++ ", %rax",
       "movq %rax, " ++ getRef result
     ]
+  Call "-" [a, b] result ->
+    [ "movq " ++ getRef a ++ ", %rax",
+      "subq " ++ getRef b ++ ", %rax",
+      "movq %rax, " ++ getRef result
+    ]
+  Call "*" [a, b] result ->
+    [ "movq " ++ getRef a ++ ", %rax",
+      "imulq " ++ getRef b ++ ", %rax",
+      "movq %rax, " ++ getRef result
+    ]
+  Call "/" [a, b] result ->
+    [ "movq " ++ getRef a ++ ", %rax",
+      "cqto",
+      "idivq " ++ getRef b,
+      "movq %rax, " ++ getRef result
+    ]
+  Call "%" [a, b] result ->
+    [ "movq " ++ getRef a ++ ", %rax",
+      "cqto",
+      "idivq " ++ getRef b,
+      "movq %rdx, " ++ getRef result
+    ]
+  Call "==" [a, b] result ->
+    intComparison "sete" a b result
+  Call "!=" [a, b] result ->
+    intComparison "setne" a b result
+  Call "<" [a, b] result ->
+    intComparison "setl" a b result
+  Call "<=" [a, b] result ->
+    intComparison "setle" a b result
+  Call ">" [a, b] result ->
+    intComparison "setg" a b result
+  Call ">=" [a, b] result ->
+    intComparison "setge" a b result
   Call fun vars result ->
     let varRegisters = zip vars ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
         varInstructions = map (\(var, reg) -> "movq " ++ getRef var ++ ", " ++ reg) varRegisters
@@ -60,6 +94,15 @@ genAssembly' ins vars = case ins of
     getRef var = case SymTab.lookup var vars of
       Just ref -> ref
       Nothing -> error "Variable not found"
+
+    intComparison :: String -> String -> String -> String -> [String]
+    intComparison op a b result =
+      [ "xor %rax, %rax",
+        "movq " ++ getRef a ++ ", %rdx",
+        "cmpq " ++ getRef b ++ ", %rdx",
+        op ++ " %al",
+        "movq %rax, " ++ getRef result
+      ]
 
 header :: SymTab String -> [String]
 header locals =
