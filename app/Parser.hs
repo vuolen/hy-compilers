@@ -93,8 +93,6 @@ type Parser a = EitherState ParserError ParserState a
 instance MonadFail (EitherState ParserError ParserState) where
   fail _ = throwMessage "Failed to match pattern"
 
--- yes im rolling out my own parser combinators, what are you going to do about it
-
 instance Alternative (EitherState ParserError ParserState) where
   empty = throwMessage "Empty parser"
   p1 <|> p2 = do

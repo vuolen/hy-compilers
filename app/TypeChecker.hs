@@ -177,7 +177,7 @@ varAssignment ast = case ast of
         if valueType == varType
           then do
             addVar name valueType
-            return Unit
+            return varType
           else
             throwTypeError
               ( "Cannot assign a value of type "
