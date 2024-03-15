@@ -43,6 +43,16 @@ genAssembly' ins vars = case ins of
       "jmp .L" ++ elseLabel
     ]
   Jump label -> ["jmp .L" ++ label]
+  Call "-" [a] result ->
+    [ "movq " ++ getRef a ++ ", %rax",
+      "negq %rax",
+      "movq %rax, " ++ getRef result
+    ]
+  Call "not" [a] result ->
+    [ "movq " ++ getRef a ++ ", %rax",
+      "xorq $1, %rax",
+      "movq %rax, " ++ getRef result
+    ]
   Call "+" [a, b] result ->
     [ "movq " ++ getRef a ++ ", %rax",
       "addq " ++ getRef b ++ ", %rax",

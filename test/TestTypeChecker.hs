@@ -51,7 +51,7 @@ equalityTestCases =
     ( "Variable assignment",
       SymTab {parent = Nothing, symbols = [("x", Int)]},
       xIsOneAST,
-      (Unit, SymTab {parent = Nothing, symbols = [("x", Int)]})
+      (Int, SymTab {parent = Nothing, symbols = [("x", Int)]})
     ),
     ( "Unary negation",
       emptySymTab,
@@ -244,7 +244,21 @@ equalityTestCases =
             (Bool, emptySymTab)
           )
       )
-      ["<", "<=", ">", ">=", "and", "or"]
+      ["and", "or"]
+    ++ map
+      ( \op ->
+          ( "1 " ++ op ++ " 1 returns Bool",
+            emptySymTab,
+            ASTNode
+              ( Apply
+                  (ASTNode (IdentifierAST op) (T.Location 0 0))
+                  [ASTNode (IntegerLiteral 1) (T.Location 0 0), ASTNode (IntegerLiteral 1) (T.Location 0 0)]
+              )
+              (T.Location 0 0),
+            (Bool, emptySymTab)
+          )
+      )
+      ["<", "<=", ">", ">=", "!=", "=="]
 
 failureTestCases =
   [ ( "Variable assignment mismatch",
