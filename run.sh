@@ -1,1 +1,1 @@
-cat $1 | docker run -i hy-compilers 
+cat $1 | docker run -i hy-compilers | python assembler.py $2

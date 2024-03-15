@@ -59,6 +59,7 @@ tokenize source = tokenize' source [] (Location 0 0)
         (' ' : rest) -> tokenize' rest tokens (Location line (column + 1))
         _ -> case asum $ map (\tokenizer -> tokenizer source) tokenizers of
           Just (Just token, match, rest) -> tokenize' rest (tokens ++ [(token, location)]) (Location line (column + length match))
-          Nothing -> error $ "No tokenizer matched source " ++ show source
+          Just (Nothing, match, rest) -> tokenize' rest tokens (Location line (column + length match))
+          _ -> error $ "No tokenizer matched source " ++ show source
       where
         (Location line column) = location

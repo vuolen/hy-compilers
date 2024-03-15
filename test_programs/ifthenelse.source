@@ -1,0 +1,11 @@
+---
+if true then 1 else 2
+
+out:
+1
+---
+if false then 1 else 2
+
+out:
+2
+---

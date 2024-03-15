@@ -52,7 +52,7 @@ common warnings
 
 
 library hy-compilers-lib
-    exposed-modules: Tokenizer, Parser, TypeChecker, IR, SymTab
+    exposed-modules: Tokenizer, Parser, TypeChecker, IR, SymTab, Assembly
     other-modules: EitherState
     hs-source-dirs: app
     build-depends: base, text, regex-pcre, mtl, transformers, containers, monad-loops

@@ -7,13 +7,13 @@ import Control.Monad.Except (MonadError (..))
 import Control.Monad.State (MonadState (get), gets, modify, put)
 import Data.Bool (bool)
 import Data.Int (Int64)
-import Debug.Trace (traceM)
+import Debug.Trace (trace, traceM)
 import EitherState (EitherState, runEitherState)
 import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (..), prettyPrint)
 import Parser qualified as P
 import SymTab (SymTab (..), insert, lookup, newScope, undoScope)
-import Tokenizer (Location, Token ())
-import TypeChecker (Type (..))
+import Tokenizer (Location (NoLocation), Token ())
+import TypeChecker (Type (..), typeCheck)
 
 type IRVar = String
 
@@ -41,7 +41,7 @@ instance Show Instruction where
 baseSymTab :: SymTab IRVar
 baseSymTab = SymTab {parent = Nothing, symbols = map (\name -> (name, name)) symbols}
   where
-    symbols = ["+", "-", "*", "/", "%", "not", "<", "<=", ">", ">=", "and", "or", "print_int", "print_bool", "read_int"]
+    symbols = ["+", "-", "*", "/", "%", "not", "<", "<=", ">", ">=", "and", "or", "!=", "==", "print_int", "print_bool", "read_int"]
 
 data IRGenState
   = IRGenState
@@ -162,15 +162,18 @@ ifElseThen ast = case ast of
         thenLabel <- newVar
         elseLabel <- newVar
         endLabel <- newVar
+        resultVar <- newVar
         condVar <- irGenerator cond
         addInstruction (CondJump condVar thenLabel elseLabel, loc)
         addInstruction (Label thenLabel, loc)
         thenVar <- irGenerator thenBranch
+        addInstruction (Copy thenVar resultVar, loc)
         addInstruction (Jump endLabel, loc)
         addInstruction (Label elseLabel, loc)
         elseVar <- irGenerator elseBranch
+        addInstruction (Copy elseVar resultVar, loc)
         addInstruction (Label endLabel, loc)
-        return "unit"
+        return resultVar
   _ -> skipIRGen
 
 block ast = case ast of
@@ -239,19 +242,23 @@ generateIR astNode = case result of
   where
     (result, state) = runEitherState (irGenerator astNode) (IRGenState baseSymTab [] 0)
 
-generateIRASTStream :: [ASTNode] -> [(Instruction, Location)]
-generateIRASTStream astStream = do
+generateIRASTStream :: [ASTNode] -> Type -> [(Instruction, Location)]
+generateIRASTStream astStream finalType = do
   let (result, state) =
         runEitherState
           ( foldM
               ( \instructions ast -> do
-                  instr <- irGenerator ast
-                  return $ instructions ++ instr
+                  irGenerator ast
               )
               []
               astStream
           )
           (IRGenState baseSymTab [] 0)
   case result of
-    Right t -> instructions state
+    Right finalVar ->
+      let finalInstr = case finalType of
+            Int -> [(Call "print_int" [finalVar] "unit", NoLocation)]
+            Bool -> [(Call "print_bool" [finalVar] "unit", NoLocation)]
+            _ -> []
+       in instructions state ++ finalInstr
     Left e -> error $ show e

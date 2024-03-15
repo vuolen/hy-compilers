@@ -1,0 +1,9 @@
+---
+{ 
+    var x = true; 
+    if x 
+    then 1 
+    else 2 }
+out:
+1
+---

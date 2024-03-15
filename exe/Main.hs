@@ -1,5 +1,6 @@
 module Main where
 
+import Assembly (genAssembly)
 import IR (generateIRASTStream)
 import Parser (parse)
 import System.Environment (getArgs)
@@ -23,6 +24,7 @@ main = do
           let astTypes = typeCheckASTStream astStream
           case astTypes of
             Left err -> error $ show err
-            Right (_, _) -> do
-              let ir = generateIRASTStream astStream
-              putStrLn $ unlines $ map (show . fst) ir
+            Right ((finalType), _) -> do
+              let ir = generateIRASTStream astStream finalType
+              let asm = genAssembly ir
+              putStrLn asm
