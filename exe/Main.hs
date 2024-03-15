@@ -1,21 +1,21 @@
 module Main where
 
-import Control.Monad (foldM)
-import IR (generateIR, generateIRASTStream)
+import IR (generateIRASTStream)
 import Parser (parse)
 import System.Environment (getArgs)
 import Tokenizer (tokenize)
-import TypeChecker (typeCheckASTStream, typeCheckBase)
+import TypeChecker (typeCheckASTStream)
 
 main :: IO ()
 main = do
-  putStrLn "~ COMPILER ~"
+  source <- getContents
   args <- getArgs
+  let tokens = tokenize source
   case args of
-    [file] -> do
-      putStrLn $ "Compiling " ++ file
-      source <- readFile file
-      let tokens = tokenize source
+    ["tokens"] -> do
+      putStrLn $ unlines $ map show tokens
+      return ()
+    _ -> do
       let ast = parse tokens
       case ast of
         Left err -> error $ show err
@@ -23,7 +23,6 @@ main = do
           let astTypes = typeCheckASTStream astStream
           case astTypes of
             Left err -> error $ show err
-            Right (_, symTab) -> do
-              let ir = generateIRASTStream symTab astStream
+            Right (_, _) -> do
+              let ir = generateIRASTStream astStream
               putStrLn $ unlines $ map (show . fst) ir
-    _ -> putStrLn "Usage: compiler <file>"

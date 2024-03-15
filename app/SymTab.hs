@@ -21,3 +21,11 @@ insert name value symTab = symTab {symbols = newSymbols name value (symbols symT
       if name == n
         then (name, value) : xs
         else (n, v) : newSymbols name value xs
+
+newScope :: SymTab a -> SymTab a
+newScope symTab = SymTab {parent = Just symTab, symbols = []}
+
+undoScope :: SymTab a -> SymTab a
+undoScope (SymTab {parent, symbols}) = case parent of
+  Just parentSymTab -> parentSymTab
+  Nothing -> SymTab {parent = Nothing, symbols = []}

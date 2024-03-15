@@ -10,17 +10,13 @@ import TypeChecker (Type, baseSymTab)
 
 irTests = testGroup "IR" [unitTests, equalityUnitTests]
 
-emptySymTab = SymTab {parent = Just baseSymTab, symbols = []}
-
-equalityTestCases :: [(String, SymTab Type, ASTNode, [Instruction])]
+equalityTestCases :: [(String, ASTNode, [Instruction])]
 equalityTestCases =
   [ ( "Integer literal",
-      emptySymTab,
       ASTNode (IntegerLiteral 1) (Location 0 0),
       [LoadIntConst 1 "var0"]
     ),
     ( "Boolean literal",
-      emptySymTab,
       ASTNode (BooleanLiteral True) (Location 0 0),
       [LoadBoolConst True "var0"]
     )
@@ -29,7 +25,7 @@ equalityTestCases =
 equalityUnitTests =
   testGroup "equalityUnitTests" $
     map
-      (\(name, symTab, ast, expected) -> testCase name $ assertEqual "" expected (map fst $ generateIR symTab ast))
+      (\(name, ast, expected) -> testCase name $ assertEqual "" expected (map fst $ generateIR ast))
       equalityTestCases
 
 unitTests =

@@ -215,6 +215,7 @@ semicolon :: Parser ()
 semicolon = semicolon' <|> inferSemicolon
   where
     semicolon' = do
+      next <- peek
       satisfyToken (T.Punctuation ";")
       return ()
     inferSemicolon = do

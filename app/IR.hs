@@ -4,15 +4,16 @@ import Control.Applicative (Alternative (..))
 import Control.Monad (foldM)
 import Control.Monad.Accum (MonadAccum (add))
 import Control.Monad.Except (MonadError (..))
-import Control.Monad.State (MonadState (get), gets, put)
+import Control.Monad.State (MonadState (get), gets, modify, put)
 import Data.Bool (bool)
 import Data.Int (Int64)
+import Debug.Trace (traceM)
 import EitherState (EitherState, runEitherState)
-import Parser (AST (Apply, BooleanLiteral, IdentifierAST, IntegerLiteral), ASTNode (..), prettyPrint)
+import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (..), prettyPrint)
 import Parser qualified as P
-import SymTab (SymTab (..), insert, lookup)
+import SymTab (SymTab (..), insert, lookup, newScope, undoScope)
 import Tokenizer (Location, Token ())
-import TypeChecker (Type (..), unitLiteral)
+import TypeChecker (Type (..))
 
 type IRVar = String
 
@@ -26,7 +27,21 @@ data Instruction
   | Jump Label
   | CondJump IRVar Label Label
   | Label Label
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Instruction where
+  show (LoadBoolConst val var) = "LoadBoolConst(" ++ show val ++ ", " ++ var ++ ")"
+  show (LoadIntConst val var) = "LoadIntConst(" ++ show val ++ ", " ++ var ++ ")"
+  show (Copy src dest) = "Copy(" ++ src ++ ", " ++ dest ++ ")"
+  show (Call op args result) = "Call(" ++ op ++ ", " ++ show args ++ ", " ++ result ++ ")"
+  show (Jump label) = "Jump(" ++ label ++ ")"
+  show (CondJump cond thenLabel elseLabel) = "CondJump(" ++ cond ++ ", " ++ thenLabel ++ ", " ++ elseLabel ++ ")"
+  show (Label label) = "Label(" ++ label ++ ")"
+
+baseSymTab :: SymTab IRVar
+baseSymTab = SymTab {parent = Nothing, symbols = map (\name -> (name, name)) symbols}
+  where
+    symbols = ["+", "-", "*", "/", "%", "not", "<", "<=", ">", ">=", "and", "or", "print_int", "print_bool", "read_int"]
 
 data IRGenState
   = IRGenState
@@ -132,7 +147,7 @@ apply ast = case ast of
   _ -> skipIRGen
 
 ifElseThen ast = case ast of
-  (ASTNode (Apply (ASTNode (IdentifierAST "if") _) [cond, thenBranch, elseBranch]) loc) -> do
+  (ASTNode (If cond thenBranch elseBranch) loc) -> do
     case elseBranch of
       (ASTNode P.Unit _) -> do
         thenLabel <- newVar
@@ -158,10 +173,54 @@ ifElseThen ast = case ast of
         return "unit"
   _ -> skipIRGen
 
--- \| If ASTNode ASTNode ASTNode
--- \| Block [ASTNode] ASTNode
--- \| VarDecl ASTNode ASTNode
--- \| TypedVarDecl ASTNode ASTNode ASTNode
+block ast = case ast of
+  (ASTNode (Block exprs value) loc) -> do
+    st <- gets symTab
+    modify $ \state -> state {symTab = newScope (symTab state)}
+    mapM_ irGenerator exprs
+    valueVar <- irGenerator value
+    modify $ \state -> state {symTab = undoScope (symTab state)}
+    return valueVar
+  _ -> skipIRGen
+
+varDecl ast = case ast of
+  (ASTNode (VarDecl (ASTNode (IdentifierAST name) _) value) loc) -> do
+    var <- newVar
+    valueVar <- irGenerator value
+    addInstruction (Copy valueVar var, loc)
+    modify $ \state -> state {symTab = insert name var (symTab state)}
+    return var
+  _ -> skipIRGen
+
+typedVarDecl ast = case ast of
+  (ASTNode (TypedVarDecl name t value) loc) -> do
+    var <- newVar
+    valueVar <- irGenerator value
+    addInstruction (Copy valueVar var, loc)
+    return var
+  _ -> skipIRGen
+
+while ast = case ast of
+  (ASTNode (Apply (ASTNode (IdentifierAST "while") _) [cond, body]) loc) -> do
+    startLabel <- newLabel
+    endLabel <- newLabel
+    addInstruction (Label startLabel, loc)
+    condVar <- irGenerator cond
+    addInstruction (CondJump condVar startLabel endLabel, loc)
+    irGenerator body
+    addInstruction (Jump startLabel, loc)
+    addInstruction (Label endLabel, loc)
+    return "unit"
+  _ -> skipIRGen
+
+varAssignment :: ASTNode -> EitherState IRError IRGenState IRVar
+varAssignment ast = case ast of
+  (ASTNode (Apply (ASTNode (IdentifierAST "=") _) [ASTNode (IdentifierAST varName) _, value]) loc) -> do
+    var <- getVar varName
+    valueVar <- irGenerator value
+    addInstruction (Copy valueVar var, loc)
+    return var
+  _ -> skipIRGen
 
 irGenerator :: ASTNode -> IRGen IRVar
 irGenerator ast = do
@@ -171,19 +230,17 @@ irGenerator ast = do
     generators =
       map
         (\generator -> generator ast)
-        [integerLiteral, booleanLiteral, identifier, apply, ifElseThen]
+        [integerLiteral, booleanLiteral, unitLiteral, identifier, while, varAssignment, apply, ifElseThen, block, varDecl, typedVarDecl]
 
-generateIR :: SymTab a -> ASTNode -> [(Instruction, Location)]
-generateIR symTab astNode = case result of
+generateIR :: ASTNode -> [(Instruction, Location)]
+generateIR astNode = case result of
   Right t -> instructions state
   Left e -> error $ show e
   where
     (result, state) = runEitherState (irGenerator astNode) (IRGenState baseSymTab [] 0)
-    baseSymTab :: SymTab IRVar
-    baseSymTab = SymTab {parent = Nothing, symbols = map (\(name, _) -> (name, name)) (symbols symTab)}
 
-generateIRASTStream :: SymTab a -> [ASTNode] -> [(Instruction, Location)]
-generateIRASTStream symTab astStream = do
+generateIRASTStream :: [ASTNode] -> [(Instruction, Location)]
+generateIRASTStream astStream = do
   let (result, state) =
         runEitherState
           ( foldM
@@ -198,6 +255,3 @@ generateIRASTStream symTab astStream = do
   case result of
     Right t -> instructions state
     Left e -> error $ show e
-  where
-    baseSymTab :: SymTab IRVar
-    baseSymTab = SymTab {parent = Nothing, symbols = map (\(name, _) -> (name, name)) (symbols symTab)}

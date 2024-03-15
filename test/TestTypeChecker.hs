@@ -159,6 +159,22 @@ equalityTestCases =
         (T.Location 0 0),
       (Int, emptySymTab)
     ),
+    ( "Block with variable shadowing",
+      SymTab {parent = Nothing, symbols = [("x", Int)]},
+      ASTNode
+        ( Block
+            [ ASTNode
+                ( VarDecl
+                    (ASTNode (IdentifierAST "x") (T.Location 0 0))
+                    (ASTNode (BooleanLiteral True) (T.Location 0 0))
+                )
+                (T.Location 0 0)
+            ]
+            (ASTNode P.Unit T.NoLocation)
+        )
+        (T.Location 0 0),
+      (Unit, SymTab {parent = Nothing, symbols = [("x", Int)]})
+    ),
     ( "if then expression",
       emptySymTab,
       ASTNode

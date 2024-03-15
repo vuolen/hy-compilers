@@ -1,13 +1,15 @@
 {
+    var x = 1;
+    var y = 1;
     while true do {
         x = 10;
-        y = if g(x) then {
+        y = if x then {
             x = x + 1;
             x
         } else {
-            g(x)
+            y
         };  # <-- (this semicolon will become optional later)
-        g(y);
+        x;
     };  # <------ (this too)
     123
 }

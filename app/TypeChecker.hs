@@ -4,7 +4,7 @@ import Control.Applicative (Alternative (..))
 import Control.Exception ()
 import Control.Monad (foldM)
 import Control.Monad.Except (MonadError (catchError), throwError)
-import Control.Monad.State (MonadState (put), get, modify)
+import Control.Monad.State (MonadState (put), get, gets, modify)
 import Data.Map (argSet)
 import Debug.Trace (trace, traceM)
 import EitherState (EitherState, runEitherState)
@@ -12,7 +12,7 @@ import GHC.Generics (Constructor (conName))
 import GHC.Read (paren)
 import Parser (AST (Apply, Block, BooleanLiteral, IdentifierAST, If, IntegerLiteral, TypedVarDecl, VarDecl), ASTNode (ASTNode), prettyPrint)
 import Parser qualified as P (AST (..))
-import SymTab (SymTab (SymTab, parent, symbols), insert, lookup)
+import SymTab (SymTab (SymTab, parent, symbols), insert, lookup, newScope)
 import Tokenizer (Location (Location))
 
 data Type = Int | Bool | Unit | Fun [Type] Type
@@ -87,8 +87,8 @@ addVar name value = modify $ \symTab -> insert name value symTab
 
 declareVariable :: String -> Type -> TypeChecker ()
 declareVariable name value = do
-  symTab <- get
-  case SymTab.lookup name symTab of
+  symbols <- gets symbols
+  case Prelude.lookup name symbols of
     Just _ -> throwTypeError ("Variable " ++ name ++ " already declared") Nothing
     Nothing -> addVar name value
 
@@ -169,23 +169,26 @@ apply ast = case ast of
 
 varAssignment :: ASTNode -> TypeChecker Type
 varAssignment ast = case ast of
-  ASTNode (Apply (ASTNode (IdentifierAST "=") _) [ASTNode (IdentifierAST name) _, value]) _ -> do
-    valueType <- typeChecker value
-    varType <- getVar name
-    if valueType == varType
-      then do
-        addVar name valueType
-        return Unit
-      else
-        throwTypeError
-          ( "Cannot assign a value of type "
-              ++ show valueType
-              ++ " to variable "
-              ++ name
-              ++ " of type "
-              ++ show varType
-          )
-          (Just ast)
+  ASTNode (Apply (ASTNode (IdentifierAST "=") _) [var, value]) _ -> do
+    case var of
+      ASTNode (IdentifierAST name) _ -> do
+        valueType <- typeChecker value
+        varType <- getVar name
+        if valueType == varType
+          then do
+            addVar name valueType
+            return Unit
+          else
+            throwTypeError
+              ( "Cannot assign a value of type "
+                  ++ show valueType
+                  ++ " to variable "
+                  ++ name
+                  ++ " of type "
+                  ++ show varType
+              )
+              (Just ast)
+      _ -> throwTypeError "Expected lhs in assignment to be identifier" (Just ast)
   _ -> skipParser
 
 equalities :: ASTNode -> TypeChecker Type
@@ -211,8 +214,12 @@ equalities ast = case ast of
 block :: ASTNode -> TypeChecker Type
 block ast = case ast of
   ASTNode (Block exprs value) _ -> do
+    symTab <- get
+    put $ newScope symTab
     mapM_ typeChecker exprs
-    typeChecker value
+    valType <- typeChecker value
+    put symTab
+    return valType
   _ -> skipParser
 
 ifThenElse :: ASTNode -> TypeChecker Type
