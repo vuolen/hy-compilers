@@ -206,10 +206,12 @@ typedVarDecl ast = case ast of
 while ast = case ast of
   (ASTNode (Apply (ASTNode (IdentifierAST "while") _) [cond, body]) loc) -> do
     startLabel <- newLabel
+    bodyLabel <- newLabel
     endLabel <- newLabel
     addInstruction (Label startLabel, loc)
     condVar <- irGenerator cond
-    addInstruction (CondJump condVar startLabel endLabel, loc)
+    addInstruction (CondJump condVar bodyLabel endLabel, loc)
+    addInstruction (Label bodyLabel, loc)
     irGenerator body
     addInstruction (Jump startLabel, loc)
     addInstruction (Label endLabel, loc)
