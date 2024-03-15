@@ -320,9 +320,8 @@ funCall = do
     argumentList = do
       (_, loc) <- satisfyToken $ T.Punctuation "("
       let comma = satisfyToken $ T.Punctuation ","
-      -- if the arg list fails, return Unit
       args <-
-        delimited parseExpr comma <|> return [ASTNode Unit loc]
+        delimited parseExpr comma <|> return []
       satisfyToken $ T.Punctuation ")"
       return args
 

@@ -1,0 +1,13 @@
+var a = read_int();
+var b = read_int();
+
+var op = read_int();
+
+if op == 1 then
+    print_int(a + b)
+else if op == 2 then
+    print_int(a - b)
+else if op == 3 then
+    print_int(a * b)
+else if op == 4 then
+    print_int(a / b)
