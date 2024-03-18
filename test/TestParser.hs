@@ -256,7 +256,7 @@ equalityTestCases =
       [ ASTNode
           ( Apply
               (ASTNode (IdentifierAST "f") (T.Location 0 0))
-              [ASTNode Unit (T.Location 0 1)]
+              []
           )
           (T.Location 0 0)
       ]
