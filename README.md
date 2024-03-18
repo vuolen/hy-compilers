@@ -14,4 +14,4 @@ provided `assembler.py`.
    - The docker build also runs the unit tests
 2. Run the compiler with `./run.sh [infile] [outfile]`
 
-To run the e2e tests, use `python e2e_tests.py`
+To run the e2e tests, use `python e2e_tests.py` (build the Docker image first)
