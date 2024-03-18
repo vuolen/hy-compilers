@@ -20,6 +20,6 @@ jobs:
 
       - name: Run test program
         run: |
-          ./run.sh fib.source fib
+          ./run.sh other_programs/fib.source fib
           chmod +x fib
           ./fib
